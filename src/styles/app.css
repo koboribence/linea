@@ -1,0 +1,339 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--chalk);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--volt);
+  outline-offset: 3px;
+}
+
+/* App shell */
+.app {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px var(--gutter) 64px;
+  display: grid;
+  gap: 32px;
+}
+
+.app__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.app__main {
+  display: grid;
+  gap: 24px;
+}
+
+.app__tagline {
+  margin: 24px 0 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-style: italic;
+  font-size: clamp(32px, 5vw, 52px);
+  line-height: 0.95;
+  text-transform: uppercase;
+  text-wrap: balance;
+  max-width: 22ch;
+}
+
+/* Logo */
+.logo {
+  width: 120px;
+  height: auto;
+}
+.logo__text {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-style: italic;
+  font-size: 170px;
+  letter-spacing: 2px;
+  fill: var(--chalk);
+}
+.logo__route {
+  fill: none;
+  stroke: var(--volt);
+  stroke-width: 9;
+  stroke-linecap: round;
+}
+.logo__start {
+  fill: var(--ink);
+  stroke: var(--volt);
+  stroke-width: 5;
+}
+.logo__finish {
+  fill: var(--volt);
+}
+
+/* Language switch */
+.lang-switch {
+  display: flex;
+  border: 1px solid var(--graphite);
+  border-radius: 999px;
+  padding: 3px;
+}
+.lang-switch__option {
+  border: 0;
+  background: none;
+  color: var(--pebble);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.lang-switch__option[aria-pressed='true'] {
+  background: var(--graphite);
+  color: var(--chalk);
+}
+
+/* Buttons */
+.button {
+  border: 0;
+  border-radius: 10px;
+  padding: 12px 20px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.button--primary {
+  background: var(--volt);
+  color: var(--ink);
+}
+.button--primary:hover {
+  filter: brightness(1.08);
+}
+.button:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+/* Drop zone */
+.dropzone {
+  border: 2px dashed var(--graphite);
+  border-radius: var(--radius);
+  padding: 56px 24px;
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 20px;
+  transition:
+    border-color 0.15s,
+    background-color 0.15s;
+}
+.dropzone--active {
+  border-color: var(--volt);
+  background: color-mix(in srgb, var(--volt) 6%, transparent);
+}
+.dropzone__text {
+  display: grid;
+  gap: 4px;
+}
+.dropzone__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 30px;
+  line-height: 1.1;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+.dropzone__hint,
+.dropzone__privacy {
+  margin: 0;
+  color: var(--pebble);
+}
+.dropzone__privacy {
+  font-size: 13px;
+}
+.dropzone__error {
+  margin: 0;
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.dropzone--compact {
+  grid-template-columns: 1fr auto;
+  justify-items: start;
+  text-align: left;
+  align-items: center;
+  padding: 14px 16px 14px 20px;
+  gap: 4px 16px;
+}
+.dropzone--compact .dropzone__title {
+  font-size: 18px;
+  color: var(--pebble);
+}
+.dropzone--compact .dropzone__error {
+  grid-column: 1 / -1;
+}
+
+/* Activity summary */
+.summary {
+  display: grid;
+  gap: 32px;
+}
+.summary__header {
+  display: grid;
+  gap: 8px;
+}
+.summary__eyebrow {
+  margin: 0;
+  color: var(--volt);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.summary__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-style: italic;
+  font-size: clamp(40px, 8vw, 72px);
+  line-height: 0.9;
+  text-transform: uppercase;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.summary__meta {
+  margin: 4px 0 0;
+  color: var(--pebble);
+  font-size: 13px;
+}
+.summary__notice {
+  margin: 4px 0 0;
+  padding: 10px 14px;
+  border-left: 2px solid var(--pebble);
+  background: var(--surface);
+  color: var(--pebble);
+  font-size: 13px;
+  max-width: 65ch;
+}
+
+.channels {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.channel {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: #565b63;
+  text-decoration: line-through;
+}
+.channel--on {
+  border-color: color-mix(in srgb, var(--volt) 45%, transparent);
+  color: var(--chalk);
+  text-decoration: none;
+}
+
+.stat-group {
+  display: grid;
+  gap: 12px;
+}
+.stat-group__title {
+  margin: 0;
+  color: var(--pebble);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.stat-group__grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px 16px;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.stat__label {
+  color: var(--pebble);
+  font-size: 12px;
+  font-weight: 500;
+}
+.stat__value {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 36px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.stat__unit {
+  margin-left: 4px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--pebble);
+}
+.stat--highlight .stat__value {
+  color: var(--volt);
+}
+
+@media (max-width: 520px) {
+  .dropzone {
+    padding: 40px 16px;
+  }
+  .dropzone--compact {
+    grid-template-columns: 1fr;
+  }
+  .stat-group__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stat__value {
+    font-size: 30px;
+  }
+}
+
+/* Touch devices can't drag files, so the compact bar is just the button */
+@media (hover: none) {
+  .dropzone--compact {
+    border: 0;
+    padding: 0;
+  }
+  .dropzone--compact .dropzone__text {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dropzone {
+    transition: none;
+  }
+}
