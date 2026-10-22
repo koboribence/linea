@@ -323,6 +323,123 @@ input {
   height: 100%;
 }
 
+.poster-frame {
+  position: relative;
+}
+
+.mode-switch {
+  width: min(100%, 360px);
+}
+
+/* Message over the preview (map loading, errors) */
+.frame-status {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(14, 15, 18, 0.82);
+  color: var(--chalk);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.frame-status--error {
+  color: var(--danger);
+  white-space: normal;
+  text-align: center;
+  max-width: 80%;
+  border-radius: 12px;
+}
+
+/* Video: the stage has the real output size and is scaled down to the frame */
+.video-frame {
+  overflow: hidden;
+  background: #0b1220;
+}
+.video-stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+.video-stage__map,
+.video-stage__overlay,
+.map-view {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.video-stage__overlay {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.video-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, calc(var(--preview-height) * var(--ratio, 0.5625)));
+}
+.video-controls__timeline {
+  flex: 1;
+}
+.play-button {
+  width: 44px;
+  padding: 10px 0;
+  font-size: 14px;
+}
+
+.render-progress {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 260px;
+  font-size: 13px;
+}
+.render-progress__bar {
+  grid-column: 1 / -1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--graphite);
+  overflow: hidden;
+}
+.render-progress__bar span {
+  display: block;
+  height: 100%;
+  background: var(--volt);
+  transition: width 0.2s;
+}
+.render-done {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
+}
+.render-done__info {
+  width: 100%;
+  text-align: center;
+  color: var(--pebble);
+  font-size: 13px;
+}
+
+/* Small print about what the map downloads */
+.privacy-note {
+  margin: 0;
+  color: var(--pebble);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 /* With a background photo the preview can be dragged; no page scroll while dragging on touch */
 .poster-frame__canvas--pannable {
   cursor: grab;

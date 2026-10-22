@@ -3,15 +3,18 @@ interface ToggleProps {
   hint?: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  /** Shown as off and not clickable, e.g. when the data behind it is missing */
+  disabled?: boolean;
 }
 
 /** On/off switch with a label. */
-export function Toggle({ label, hint, checked, onChange }: ToggleProps) {
+export function Toggle({ label, hint, checked, onChange, disabled = false }: ToggleProps) {
   return (
     <button
       type="button"
       role="switch"
-      aria-checked={checked}
+      aria-checked={checked && !disabled}
+      disabled={disabled}
       className="toggle"
       onClick={() => onChange(!checked)}
     >

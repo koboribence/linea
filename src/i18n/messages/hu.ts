@@ -97,6 +97,43 @@ export const hu = {
   'photo.error': 'Ezt a képet nem sikerült megnyitni. Próbáld JPG vagy PNG formátumban.',
   'photo.panLabel': 'Előnézet: húzd a háttérképet, vagy mozgasd a nyilakkal',
 
+  'mode.label': 'Mit készítesz?',
+  'mode.image': 'Kép',
+  'mode.video': 'Videó',
+
+  'background.section': 'Háttér',
+  'background.theme': 'Szín',
+  'background.map': '3D térkép',
+  'background.photo': 'Fotó',
+  'map.style': 'Térkép',
+  'mapStyle.dark': 'Sötét',
+  'mapStyle.satellite': 'Műhold',
+  'mapStyle.satelliteHint':
+    'Az ingyenes műholdkép felbontása kb. 10 m, ezért közelről elmosódott; a videón a kamera magasabbról filmez.',
+  'map.loading': 'Térkép betöltése…',
+  'map.failed': 'A térképet nem sikerült betölteni. Ellenőrizd az internetkapcsolatot.',
+  'map.needsRoute': 'A 3D térképhez GPS-útvonal kell.',
+  'map.privacy':
+    'A térképhez a böngésződ letölti a környék műholdképét. A szolgáltató így látja, nagyjából melyik terület kell; az edzésfájl nem kerül fel sehova.',
+
+  'video.section': 'Videó',
+  'video.length': 'Hossz',
+  'video.seconds': '{count} mp',
+  'video.play': 'Lejátszás',
+  'video.pause': 'Szünet',
+  'video.timeline': 'Idővonal',
+  'video.export': 'Videó készítése',
+  'video.rendering': 'Készül… {percent}%',
+  'video.cancel': 'Mégse',
+  'video.ready': 'Kész: {size} MB, {format}',
+  'video.download': 'Videó letöltése',
+  'video.share': 'Megosztás',
+  'video.failed': 'A videó elkészítése nem sikerült. Próbáld újra.',
+  'video.unsupported':
+    'Ez a böngésző nem tud videót készíteni. Próbáld Chrome-ban, Edge-ben vagy Safariban.',
+  'video.hint':
+    'Képkockánként készül, ezért tovább tart, mint maga a videó, de az eredmény sima lesz.',
+
   'editor.text': 'Szöveg',
   'editor.title': 'Cím',
   'editor.titleCount': '{count}/{max}',
@@ -110,6 +147,8 @@ export const hu = {
   'editor.showDate': 'Dátum',
   'editor.showSport': 'Sportág',
 
+  'editor.noDate': 'A fájlban nincs dátum. Megadhatod itt, de nem kötelező.',
+  'editor.manualDate': 'Dátum',
   'editor.stats': 'Adatok a képen',
   'editor.statsHint': 'Legfeljebb {max}, a kiválasztás sorrendjében.',
 

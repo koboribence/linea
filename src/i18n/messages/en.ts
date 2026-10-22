@@ -97,6 +97,42 @@ export const en: Messages = {
   'photo.error': "This image couldn't be opened. Try a JPG or PNG.",
   'photo.panLabel': 'Preview: drag the background photo or move it with the arrow keys',
 
+  'mode.label': 'What are you making?',
+  'mode.image': 'Image',
+  'mode.video': 'Video',
+
+  'background.section': 'Background',
+  'background.theme': 'Color',
+  'background.map': '3D map',
+  'background.photo': 'Photo',
+  'map.style': 'Map',
+  'mapStyle.dark': 'Dark',
+  'mapStyle.satellite': 'Satellite',
+  'mapStyle.satelliteHint':
+    'The free satellite imagery has ~10 m resolution, so it looks soft up close; in videos the camera flies higher.',
+  'map.loading': 'Loading map…',
+  'map.failed': "The map couldn't be loaded. Check your internet connection.",
+  'map.needsRoute': 'The 3D map needs a GPS route.',
+  'map.privacy':
+    'For the map, your browser downloads satellite images of the area, so the provider sees roughly which area is needed. Your activity file is never uploaded.',
+
+  'video.section': 'Video',
+  'video.length': 'Length',
+  'video.seconds': '{count} s',
+  'video.play': 'Play',
+  'video.pause': 'Pause',
+  'video.timeline': 'Timeline',
+  'video.export': 'Create video',
+  'video.rendering': 'Rendering… {percent}%',
+  'video.cancel': 'Cancel',
+  'video.ready': 'Ready: {size} MB, {format}',
+  'video.download': 'Download video',
+  'video.share': 'Share',
+  'video.failed': "The video couldn't be created. Please try again.",
+  'video.unsupported': "This browser can't create videos. Try Chrome, Edge or Safari.",
+  'video.hint':
+    "It's rendered frame by frame, so it takes longer than the video itself, but the result is smooth.",
+
   'editor.text': 'Text',
   'editor.title': 'Title',
   'editor.titleCount': '{count}/{max}',
@@ -110,6 +146,8 @@ export const en: Messages = {
   'editor.showDate': 'Date',
   'editor.showSport': 'Sport',
 
+  'editor.noDate': "The file has no date. You can add one here, but you don't have to.",
+  'editor.manualDate': 'Date',
   'editor.stats': 'Stats on the image',
   'editor.statsHint': 'Up to {max}, in the order you pick them.',
 

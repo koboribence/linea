@@ -1,16 +1,20 @@
 import type { Activity } from '../../domain/activity/Activity';
 import { BRAND } from '../../brand';
 
-/** Saves or shares the rendered canvas as a PNG file. */
+/** Saves or shares the finished image or video file. */
 export class PosterExporter {
   /** "linea-2026-10-19.png" */
-  static fileName(activity: Activity): string {
+  static fileName(activity: Activity, extension = 'png'): string {
     const date = activity.startTime?.toISOString().slice(0, 10) ?? 'activity';
-    return `${BRAND.name.toLowerCase()}-${date}.png`;
+    return `${BRAND.name.toLowerCase()}-${date}.${extension}`;
   }
 
   static async download(canvas: HTMLCanvasElement, fileName: string): Promise<void> {
-    const url = URL.createObjectURL(await PosterExporter.toBlob(canvas));
+    PosterExporter.downloadBlob(await PosterExporter.toBlob(canvas), fileName);
+  }
+
+  static downloadBlob(blob: Blob, fileName: string): void {
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = fileName;
@@ -19,14 +23,18 @@ export class PosterExporter {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  /** True on devices with a system share sheet that accepts images (mostly phones). */
-  static canShare(): boolean {
-    const probe = new File([], 'probe.png', { type: 'image/png' });
+  /** True on devices with a system share sheet that accepts files of this type (mostly phones). */
+  static canShare(type = 'image/png'): boolean {
+    const probe = new File([], 'probe', { type });
     return typeof navigator.canShare === 'function' && navigator.canShare({ files: [probe] });
   }
 
   static async share(canvas: HTMLCanvasElement, fileName: string): Promise<void> {
-    const file = new File([await PosterExporter.toBlob(canvas)], fileName, { type: 'image/png' });
+    await PosterExporter.shareBlob(await PosterExporter.toBlob(canvas), fileName);
+  }
+
+  static async shareBlob(blob: Blob, fileName: string): Promise<void> {
+    const file = new File([blob], fileName, { type: blob.type });
     try {
       await navigator.share({ files: [file] });
     } catch (error) {

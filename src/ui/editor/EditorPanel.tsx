@@ -11,7 +11,8 @@ import { Section } from '../controls/Section';
 import { Segmented } from '../controls/Segmented';
 import { Toggle } from '../controls/Toggle';
 import { FontPicker } from './FontPicker';
-import { PhotoPicker } from './PhotoPicker';
+import { BackgroundPicker } from './BackgroundPicker';
+import { MapStylePicker } from './MapStylePicker';
 import { StatPicker } from './StatPicker';
 import { ThemePicker } from './ThemePicker';
 
@@ -29,7 +30,14 @@ interface EditorPanelProps {
   hasPhoto: boolean;
   onPickPhoto: (file: File) => Promise<boolean>;
   onRemovePhoto: () => void;
+  mode: EditorMode;
+  /** False when the file has no start time, so there's no date to show */
+  hasDate: boolean;
+  mapLoading: boolean;
+  mapFailed: boolean;
 }
+
+export type EditorMode = 'image' | 'video';
 
 const SPORTS: SportType[] = ['run', 'ride', 'other'];
 
@@ -62,18 +70,45 @@ export function EditorPanel(props: EditorPanelProps) {
       </Section>
 
       <Section title={t('editor.colors')}>
-        <ThemePicker design={design} update={update} hasPhoto={props.hasPhoto} />
-      </Section>
-
-      <Section title={t('photo.section')} hint={props.hasPhoto ? undefined : t('photo.hint')}>
-        <PhotoPicker
-          hasPhoto={props.hasPhoto}
-          settings={design.photo}
-          onChange={(photo) => update({ photo })}
-          onPick={props.onPickPhoto}
-          onRemove={props.onRemovePhoto}
+        <ThemePicker
+          design={design}
+          update={update}
+          // A transparent sticker only makes sense on a plain image without map or photo
+          allowTransparent={props.mode === 'image' && design.background === 'theme'}
         />
       </Section>
+
+      {props.mode === 'image' ? (
+        <Section title={t('background.section')}>
+          <BackgroundPicker
+            design={design}
+            update={update}
+            hasRoute={hasRoute}
+            mapLoading={props.mapLoading}
+            mapFailed={props.mapFailed}
+            hasPhoto={props.hasPhoto}
+            onPickPhoto={props.onPickPhoto}
+            onRemovePhoto={props.onRemovePhoto}
+          />
+        </Section>
+      ) : (
+        <Section title={t('video.section')}>
+          <div className="field">
+            <span className="field__label">{t('video.length')}</span>
+            <Segmented
+              label={t('video.length')}
+              options={PosterDefaults.VIDEO_LENGTHS.map((seconds) => ({
+                value: seconds,
+                label: i18n.t('video.seconds', { count: seconds }),
+              }))}
+              value={design.videoSeconds}
+              onChange={(videoSeconds) => update({ videoSeconds })}
+            />
+          </div>
+          <MapStylePicker design={design} update={update} />
+          <p className="privacy-note">{t('map.privacy')}</p>
+        </Section>
+      )}
 
       <Section title={t('editor.text')}>
         <label className="field">
@@ -105,9 +140,24 @@ export function EditorPanel(props: EditorPanelProps) {
           <span className="field__label">{t('editor.font')}</span>
           <FontPicker value={design.fontId} onChange={(fontId) => update({ fontId })} />
         </div>
+        {/* Files without a start time: the date can be typed in, but doesn't have to be */}
+        {!props.hasDate && (
+          <label className="field">
+            <span className="field__label">{t('editor.manualDate')}</span>
+            <input
+              id="manual-date"
+              className="text-input"
+              type="date"
+              value={design.manualDate ?? ''}
+              onChange={(event) => update({ manualDate: event.target.value || undefined })}
+            />
+            <span className="field__hint">{t('editor.noDate')}</span>
+          </label>
+        )}
         <Toggle
           label={t('editor.showDate')}
           checked={design.showDate}
+          disabled={!props.hasDate && !design.manualDate}
           onChange={(showDate) => update({ showDate })}
         />
         <Toggle

@@ -4,7 +4,7 @@ import { Graphemes } from '../format/Graphemes';
 import { Color } from './Color';
 import { PhotoPlacement } from './PhotoPlacement';
 import { PosterFonts, type FontFace, type PosterFont } from './PosterFont';
-import type { PosterScene, PosterStat } from './PosterScene';
+import type { PhotoImage, PosterScene, PosterStat } from './PosterScene';
 
 const BASE_WIDTH = 1080;
 /** Gap between stat columns, in units */
@@ -89,17 +89,31 @@ export class PosterRenderer {
     if (ctx) new PosterRenderer(ctx, scene).draw();
   }
 
+  /**
+   * The middle area where the route goes (between title and stats). The map background
+   * uses it to frame the route in the same place the 2D route would be.
+   */
+  static middleBox(scene: PosterScene): Box {
+    const ctx = document.createElement('canvas').getContext('2d');
+    if (!ctx) return { x: 0, y: 0, width: scene.width, height: scene.height };
+    return new PosterRenderer(ctx, scene).layout().middle;
+  }
+
   private draw(): void {
+    const { scene } = this;
     const layout = this.layout();
     this.drawBackground(layout.middle);
     this.drawHeader(layout.title);
-    if (this.scene.route) this.drawRoute(layout.middle);
+    // On a map background the map has already drawn the route
+    if (scene.map?.route) this.drawRoutePoints(scene.map.route, scene.map.showStart !== false);
+    else if (scene.route && !scene.map) this.drawRoute(layout.middle);
     else if (layout.hero) this.drawHero(layout.hero, layout.middle);
-    if (layout.elevation && this.scene.elevation) {
-      this.drawElevation(this.scene.elevation, layout.elevation);
+    if (layout.elevation && scene.elevation) {
+      this.drawElevation(scene.elevation, layout.elevation);
     }
     if (layout.stats) this.drawStats(layout.stats, layout.divider!);
-    if (this.scene.logo) this.drawLogo(this.scene.logo);
+    if (scene.logo) this.drawLogo(scene.logo);
+    if (scene.map) this.drawAttribution(scene.map.attribution);
   }
 
   // ── Layout ────────────────────────────────────────────────────────────
@@ -109,7 +123,7 @@ export class PosterRenderer {
     const isStory = scene.height / scene.width > 1.5;
     const title = this.layoutTitle(isStory);
 
-    const hero = scene.route ? undefined : scene.stats[0];
+    const hero = scene.route || scene.map ? undefined : scene.stats[0];
     const gridStats = hero ? scene.stats.slice(1) : scene.stats;
     const bottom = scene.logo ? this.logoBaseline() - 80 * u : scene.height - this.padBottom;
     const middleTop = title.bottom + 56 * u;
@@ -218,6 +232,7 @@ export class PosterRenderer {
     const { ctx, scene } = this;
     ctx.clearRect(0, 0, scene.width, scene.height);
     if (scene.transparent) return;
+    if (scene.map) return this.drawMapBackdrop(scene.map.image);
 
     const [from, to] = scene.colors.background;
     const gradient = ctx.createLinearGradient(0, 0, scene.width, scene.height);
@@ -274,17 +289,23 @@ export class PosterRenderer {
     });
   }
 
+  /** 2D route: fitted into the middle box. */
   private drawRoute(middle: Box): void {
+    const inset = this.scene.routeWidth * this.u * 2;
+    this.drawRoutePoints(
+      this.scene.route!.fitTo({
+        x: middle.x + inset,
+        y: middle.y + inset,
+        width: middle.width - 2 * inset,
+        height: middle.height - 2 * inset,
+      }),
+    );
+  }
+
+  /** Draws a route at given screen points: 2D fitted, or projected onto the 3D map. */
+  private drawRoutePoints(points: ScreenPoint[], showStart = true): void {
     const { ctx, u, scene } = this;
-    const route = scene.route!;
     const width = scene.routeWidth * u;
-    const inset = width * 2;
-    const points = route.fitTo({
-      x: middle.x + inset,
-      y: middle.y + inset,
-      width: middle.width - 2 * inset,
-      height: middle.height - 2 * inset,
-    });
     if (points.length < 2) return;
 
     this.noShadow();
@@ -292,8 +313,8 @@ export class PosterRenderer {
     ctx.lineJoin = 'round';
     ctx.lineWidth = width;
 
-    // Pass 1: the whole line in the accent color, with glow if the theme wants it
-    if (scene.colors.glow) {
+    // Pass 1: the whole line in the accent color, glowing on dark themes and always on maps
+    if (scene.colors.glow || scene.map) {
       ctx.shadowColor = this.accent.toRgba(0.65);
       ctx.shadowBlur = 36 * u;
     }
@@ -303,11 +324,12 @@ export class PosterRenderer {
     ctx.shadowBlur = 0;
 
     // Pass 2: gradient coloring, segment by segment
-    if (route.hasValues) {
+    if (points[0]!.value !== undefined) {
       const soft = Color.parse(scene.colors.accentSoft);
       for (let i = 1; i < points.length; i++) {
         const a = points[i - 1]!;
         const b = points[i]!;
+        if (b.newSegment) continue;
         ctx.strokeStyle = soft.mix(this.accent, ((a.value ?? 0) + (b.value ?? 0)) / 2).toHex();
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
@@ -316,11 +338,11 @@ export class PosterRenderer {
       }
     }
 
-    this.drawMarkers(points[0]!, points.at(-1)!, width);
+    this.drawMarkers(showStart ? points[0] : undefined, points.at(-1)!, width);
   }
 
   /** Start: open ring, finish: filled dot (same as the logo). */
-  private drawMarkers(start: ScreenPoint, finish: ScreenPoint, width: number): void {
+  private drawMarkers(start: ScreenPoint | undefined, finish: ScreenPoint, width: number): void {
     const { ctx, scene } = this;
     const ring = width * 1.3;
 
@@ -328,6 +350,7 @@ export class PosterRenderer {
     ctx.beginPath();
     ctx.arc(finish.x, finish.y, width * 1.15, 0, Math.PI * 2);
     ctx.fill();
+    if (!start) return;
 
     ctx.beginPath();
     ctx.arc(start.x, start.y, ring, 0, Math.PI * 2);
@@ -369,6 +392,40 @@ export class PosterRenderer {
     this.drawValue(stat, cx - total / 2, top + blockHeight, size, scene.colors.accent);
   }
 
+  /**
+   * Map background: the rendered map (or nothing, when video frames put the live map under it),
+   * with the theme color fading in at the top and bottom so the text stays readable.
+   */
+  private drawMapBackdrop(image: PhotoImage | undefined): void {
+    const { ctx, scene } = this;
+    if (image) ctx.drawImage(image.source, 0, 0, scene.width, scene.height);
+    const bg = Color.parse(scene.colors.background[0]);
+    const scrim = (from: number, to: number, alphaFrom: number, alphaTo: number) => {
+      const gradient = ctx.createLinearGradient(0, from, 0, to);
+      gradient.addColorStop(0, bg.toRgba(alphaFrom));
+      gradient.addColorStop(1, bg.toRgba(alphaTo));
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, Math.min(from, to), scene.width, Math.abs(to - from));
+    };
+    scrim(0, scene.height * 0.4, 0.88, 0);
+    scrim(scene.height * 0.52, scene.height, 0, 0.92);
+  }
+
+  /** Data credits the map licenses require, small but legible, at the very bottom. */
+  private drawAttribution(lines: string[]): void {
+    const { ctx, u, scene } = this;
+    this.noShadow();
+    this.setFont(PosterFonts.css({ family: 'Inter, system-ui, sans-serif', weight: 500 }, 14 * u));
+    ctx.fillStyle = Color.parse(scene.colors.text).toRgba(0.6);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    const bottom = this.logoBaseline() + 56 * u;
+    lines.forEach((line, i) => {
+      const y = bottom - (lines.length - 1 - i) * 19 * u;
+      ctx.fillText(this.ellipsize(line, scene.width - 2 * this.pad), scene.width / 2, y);
+    });
+  }
+
   private drawElevation(profile: ElevationProfile, box: Box): void {
     const { ctx, u } = this;
     const { samples, min, max } = profile;
@@ -394,10 +451,26 @@ export class PosterRenderer {
     ctx.lineWidth = 3 * u;
     ctx.lineJoin = 'round';
     ctx.stroke();
+
+    // Video: a dot riding along the profile shows where the flyover is
+    const marker = this.scene.elevationMarker;
+    if (marker !== undefined) {
+      const i = Math.round(Math.max(0, Math.min(1, marker)) * (samples.length - 1));
+      ctx.fillStyle = this.accent.toRgba(0.25);
+      ctx.fillRect(x(i) - 1 * u, box.y, 2 * u, box.height);
+      ctx.beginPath();
+      ctx.arc(x(i), y(samples[i]!), 9 * u, 0, Math.PI * 2);
+      ctx.fillStyle = this.scene.colors.accent;
+      ctx.fill();
+      ctx.lineWidth = 3 * u;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+    }
   }
 
   private drawStats(layout: StatsLayout, divider: number): void {
     const { ctx, u, pad, scene } = this;
+    ctx.globalAlpha = scene.statsOpacity ?? 1;
     ctx.fillStyle = Color.parse(scene.colors.muted).toRgba(0.4);
     ctx.fillRect(pad, divider, scene.width - 2 * pad, 2 * u);
     this.textShadow();
@@ -426,6 +499,7 @@ export class PosterRenderer {
       const valueX = centered ? x + (columnWidth - this.valueWidth(stat, layout.valueSize)) / 2 : x;
       this.drawValue(stat, valueX, baseline, layout.valueSize, scene.colors.text);
     });
+    ctx.globalAlpha = 1;
   }
 
   private drawLogo(name: string): void {
@@ -562,6 +636,10 @@ export class PosterRenderer {
     const { ctx } = this;
     ctx.beginPath();
     ctx.moveTo(points[0]!.x, points[0]!.y);
-    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i]!.x, points[i]!.y);
+    for (let i = 1; i < points.length; i++) {
+      const p = points[i]!;
+      if (p.newSegment) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
   }
 }

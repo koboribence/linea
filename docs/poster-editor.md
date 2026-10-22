@@ -61,14 +61,19 @@ Három réteg, mindegyik egy dologért felel:
 | `customBackground`, `customAccent` | Saját szín, felülírja a témáét | – |
 | `transparent` | Átlátszó háttér: matrica a saját fotóra | `false` |
 | `title` | A cím; legfeljebb 50 látható karakter (`MAX_TITLE`), emojival is. `undefined` esetén automatikus | a fájlban szereplő név |
-| `showDate` | Dátum a cím fölött, pontos idő nélkül (pl. „2013. augusztus 16.”) | `true` |
+| `showDate` | Dátum a cím fölött, pontos idő nélkül (pl. „2013. augusztus 16.”). Ha a fájlban nincs dátum, csak kézi dátummal kapcsolható be | `true` |
+| `manualDate` | Kézzel megadott dátum (ÉÉÉÉ-HH-NN), ha a fájlban nincs; nem kötelező, és nem kerül tárolásra | – |
 | `showSport` | Sportág a cím fölött, a dátumtól függetlenül kapcsolható | `true` |
-| `stats` | A képen szereplő adatok, sorrendben, legfeljebb 6 (`MAX_STATS`) | 4 db, sportágfüggő |
+| `stats` | A képen szereplő adatok, sorrendben, legfeljebb 6 (`MAX_STATS`) | sportágfüggő (lásd lent) |
+| `statsSport` | Melyik sportághoz készült az adatválasztás | a fájl sportága |
 | `routeColoring` | `solid`, `speed`, `elevation` vagy `heartRate` | `speed` |
 | `routeWidth` | Vonalvastagság px-ben, 1080 px széles képre | `10` |
 | `privacyMeters` | Elrejtett táv az útvonal két végén: 0, 200, 500 vagy 1000 m | `200` |
 | `showElevation` | Magasságprofil | `true` |
 | `showLogo` | Logó a kép alján | `true` |
+| `background` | `theme` (szín), `map` (3D térkép) vagy `photo` (fotó) | `theme` |
+| `mapStyle` | `dark` vagy `satellite`, lásd [map-flyover.md](map-flyover.md) | `dark` |
+| `videoSeconds` | A videó hossza: 10, 15 vagy 20 mp | 15 |
 | `photo` | Háttérkép beállításai: `overlay` (0–1), `zoom` (0,5–3), `offsetX`/`offsetY` (eltolás a középponttól). Csak betöltött képnél számít | overlay 55%, középen |
 
 **Mi marad meg a következő fájlnál (`RememberedDesign`):** a [DesignStorage](../src/ui/editor/DesignStorage.ts) a `localStorage`-ba menti a teljes kinézetet (`PosterStyle`) és a kiválasztott adatokat. A cím és a háttérkép nem marad meg: a cím az új fájl nevéből jön, a kép pedig egy adott edzéshez tartozik. Az edzés adatai és a fotó soha nem kerülnek tárolásra.
@@ -90,7 +95,7 @@ Ismeretlen vagy régi azonosítók a tárolóból egyszerűen kimaradnak.
 
 | Eset | Lista (amelyik elérhető, abból az első 4) |
 |---|---|
-| Futás | táv, átlagtempó, mozgásidő, emelkedés |
+| Futás | táv, átlagtempó, átlagsebesség (km/h), mozgásidő, emelkedés |
 | Bringa | táv, átlagsebesség, mozgásidő, emelkedés |
 | Egyéb | táv, mozgásidő, átlagsebesség, emelkedés |
 | GPS nélkül (beltéri) | táv, mozgásidő, teljes idő, átlagwatt, átlagpulzus |
@@ -102,6 +107,10 @@ Ha 4-nél kevesebb jön össze, a teljes idő, az átlagwatt, az átlagpulzus é
 **Sportváltáskor** az `adaptStats` párban cseréli a tempót és a sebességet (`avgPace` ↔ `avgSpeed`, `bestPace` ↔ `maxSpeed`), így a felhasználó választása megmarad.
 
 **Színezés:** csak az a lehetőség jelenik meg, amelyhez van adat (`coloringOptions`). Ha a megjegyzett színezés nem érhető el, egyszínű lesz.
+
+**Öröklés a következő fájlra:** az adatválasztás csak **azonos sportágú** fájlra öröklődik (`statsSport`). Egy bringás választás (pl. watt) futásnál értelmetlen, ezért más sportágnál az alapértelmezett lista jön. A sportág nélkül tárolt régi választás más sportágnak számít.
+
+**Futás és km/h:** futásnál a tempó mellett az átlag- és a max. sebesség (km/h) is választható, és az átlagsebesség alapból a képen van.
 
 ## Sportág a szerkesztőben
 
@@ -176,6 +185,17 @@ Minden téma `ThemeColors` értékeket ad:
 **Saját színek:**
 - **Saját háttér:** a szöveg színe a háttér fényerejétől függően automatikusan sötét vagy világos lesz, a `muted` pedig ebből keverődik.
 - **Saját kiemelő szín:** az `accentSoft` a kiemelő szín és a háttér keveréke.
+
+## Háttér és mód
+
+A felület tetején „Kép | Videó” váltó van; videó csak GPS-útvonallal érhető el. Kép módban a „Háttér” szakaszban három lehetőség közül lehet választani:
+- **Szín:** a téma színátmenete.
+- **3D térkép:** sötét vagy műholdas térkép, rajta az útvonal. A részleteket lásd: [map-flyover.md](map-flyover.md).
+- **Fotó:** a felhasználó saját képe, lásd lent.
+
+## Kézi dátum
+
+Ha a fájlban nincs időbélyeg (pl. egy tervezett útvonal GPX-ben), a dátum-kapcsoló alatt egy dátumválasztó jelenik meg. Kitöltése nem kötelező. Ha üres, a dátum-kapcsoló letiltott, és egy rövid magyarázat jelzi, miért. A megadott dátum dél 12 órával kerül a képre, hogy semmilyen időzóna ne tolja át a szomszédos napra.
 
 ## Háttérkép
 

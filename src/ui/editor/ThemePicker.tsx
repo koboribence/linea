@@ -10,11 +10,12 @@ import { ThemeLibrary } from '../themes/ThemeLibrary';
 interface ThemePickerProps {
   design: PosterDesign;
   update: (changes: Partial<PosterDesign>) => void;
-  hasPhoto: boolean;
+  /** The transparent-sticker switch is offered only where it makes sense */
+  allowTransparent: boolean;
 }
 
 /** Preset and saved swatches, two custom colors, saving/sharing them, and the sticker switch. */
-export function ThemePicker({ design, update, hasPhoto }: ThemePickerProps) {
+export function ThemePicker({ design, update, allowTransparent }: ThemePickerProps) {
   const { i18n } = useLocale();
   const [saved, setSaved] = useState(ThemeLibrary.load);
   const [sharing, setSharing] = useState<CustomTheme>();
@@ -110,8 +111,7 @@ export function ThemePicker({ design, update, hasPhoto }: ThemePickerProps) {
         </div>
       )}
 
-      {/* With a background photo the image can't be a transparent sticker */}
-      {!hasPhoto && (
+      {allowTransparent && (
         <Toggle
           label={i18n.t('editor.transparent')}
           hint={i18n.t('editor.transparentHint')}

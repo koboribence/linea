@@ -3,6 +3,7 @@ import type { SportType } from '../activity/SportType';
 import { Graphemes } from '../format/Graphemes';
 import type { StatId } from '../format/StatPresenter';
 import type { RouteColoring } from '../route/RouteShape';
+import type { MapStyleId } from '../map/MapStyles';
 import { PhotoPlacement, type PhotoSettings } from './PhotoPlacement';
 import { PosterFonts, type FontId } from './PosterFont';
 import type { PosterFormatId } from './PosterFormat';
@@ -19,10 +20,14 @@ export interface PosterDesign {
   transparent: boolean;
   /** Starts as the activity's own name; undefined = automatic title ("Morning Run") */
   title?: string;
+  /** Which sport `stats` was picked for; picks only carry over to the same sport */
+  statsSport: SportType;
   /** Date (no time) above the title */
   showDate: boolean;
   /** Sport name above the title */
   showSport: boolean;
+  /** Date typed in by the user (YYYY-MM-DD) when the file has none; optional */
+  manualDate?: string;
   /** Shown stats in order, at most PosterDefaults.MAX_STATS */
   stats: StatId[];
   routeColoring: RouteColoring;
@@ -33,16 +38,28 @@ export interface PosterDesign {
   showLogo: boolean;
   /** Placement of the background photo; only used while a photo is loaded */
   photo: PhotoSettings;
+  /** What fills the background behind the text */
+  background: BackgroundKind;
+  /** Look of the 3D map (image background and video) */
+  mapStyle: MapStyleId;
+  /** Length of the flyover video, seconds */
+  videoSeconds: number;
 }
 
+export type BackgroundKind = 'theme' | 'map' | 'photo';
+
 /** The look-and-feel part of a design. Photo placement belongs to one photo, so it's left out. */
-export type PosterStyle = Omit<PosterDesign, 'title' | 'stats' | 'photo'>;
+export type PosterStyle = Omit<
+  PosterDesign,
+  'title' | 'stats' | 'statsSport' | 'photo' | 'manualDate'
+>;
 
 /** What carries over to the next file: the look and the picked stats, never the title. */
-export type RememberedDesign = Partial<PosterStyle> & { stats?: StatId[] };
+export type RememberedDesign = Partial<PosterStyle> & { stats?: StatId[]; statsSport?: SportType };
 
 const PREFERRED_STATS: Record<SportType, StatId[]> = {
-  run: ['distance', 'avgPace', 'movingTime', 'elevationGain'],
+  // Runners get km/h next to pace by default; it's what they asked to see
+  run: ['distance', 'avgPace', 'avgSpeed', 'movingTime', 'elevationGain'],
   ride: ['distance', 'avgSpeed', 'movingTime', 'elevationGain'],
   other: ['distance', 'movingTime', 'avgSpeed', 'elevationGain'],
 };
@@ -83,7 +100,12 @@ export class PosterDefaults {
     privacyMeters: 200,
     showElevation: true,
     showLogo: true,
+    background: 'theme',
+    mapStyle: 'dark',
+    videoSeconds: 15,
   };
+
+  static readonly VIDEO_LENGTHS = [10, 15, 20] as const;
 
   /**
    * A design for a newly loaded activity: its own name as title, the remembered look,
@@ -94,7 +116,9 @@ export class PosterDefaults {
     available: StatId[],
     remembered: RememberedDesign = {},
   ): PosterDesign {
-    const { stats: rememberedStats, ...style } = remembered;
+    const { stats: rememberedStats, statsSport: rememberedSport, ...style } = remembered;
+    // A cyclist's watt picks make no sense on a run: picks carry over within the same sport only
+    const sameSport = rememberedSport === activity.sport;
     const merged = { ...PosterDefaults.STYLE, ...style, photo: PhotoPlacement.DEFAULTS };
     const coloring = PosterDefaults.coloringOptions(activity);
     const name = activity.meta.name?.trim();
@@ -102,11 +126,16 @@ export class PosterDefaults {
       ...merged,
       title: name ? Graphemes.truncate(name, PosterDefaults.MAX_TITLE) : undefined,
       routeColoring: coloring.includes(merged.routeColoring) ? merged.routeColoring : 'solid',
+      // A photo is never remembered, and a map needs GPS
+      background:
+        merged.background === 'map' && activity.hasGps ? 'map' : PosterDefaults.STYLE.background,
       // A font set removed in a later version falls back to the default
       fontId: PosterFonts.IDS.includes(merged.fontId) ? merged.fontId : PosterDefaults.STYLE.fontId,
-      stats: rememberedStats?.length
-        ? PosterDefaults.carryOverStats(rememberedStats, activity, available)
-        : PosterDefaults.defaultStats(activity.sport, available, activity.hasGps),
+      statsSport: activity.sport,
+      stats:
+        sameSport && rememberedStats?.length
+          ? PosterDefaults.carryOverStats(rememberedStats, activity, available)
+          : PosterDefaults.defaultStats(activity.sport, available, activity.hasGps),
     };
   }
 
@@ -129,11 +158,12 @@ export class PosterDefaults {
   static defaultStats(sport: SportType, available: StatId[], hasGps = true): StatId[] {
     const has = (id: StatId) => available.includes(id);
     const chosen = (hasGps ? PREFERRED_STATS[sport] : INDOOR_STATS).filter(has);
+    // Missing preferred stats are replaced, up to the usual count
     for (const id of FALLBACK_STATS) {
       if (chosen.length >= PosterDefaults.DEFAULT_STAT_COUNT) break;
       if (has(id) && !chosen.includes(id)) chosen.push(id);
     }
-    return chosen.slice(0, PosterDefaults.DEFAULT_STAT_COUNT);
+    return chosen.slice(0, PosterDefaults.MAX_STATS);
   }
 
   /**

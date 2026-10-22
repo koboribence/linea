@@ -14,15 +14,35 @@ export interface Box {
   height: number;
 }
 
+/** A route in geographic coordinates, already privacy-trimmed and simplified. */
+export interface GeoRoute {
+  /** [longitude, latitude] pairs, as maps expect them */
+  coordinates: [number, number][];
+  /** Meters above sea level, where recorded */
+  elevations: (number | undefined)[];
+  /** Meters along the route from its (trimmed) start */
+  distances: number[];
+  /** Epoch ms per point, where recorded (for live time counters) */
+  times: (number | undefined)[];
+  /** Meters of the activity hidden before the trimmed start (the privacy zone) */
+  startDistance: number;
+  /** 0…1 per point for gradient coloring */
+  values?: number[];
+}
+
 export interface ScreenPoint {
   x: number;
   y: number;
   /** 0 (low) … 1 (high) for gradient coloring; undefined when the line is a single color */
   value?: number;
+  /** Starts a new piece of line (the route was hidden in between, e.g. behind the camera) */
+  newSegment?: boolean;
 }
 
 /** Simplification tolerance as a share of the route's size (~1 px on a 1000 px drawing). */
 const SIMPLIFY_RATIO = 0.001;
+/** Finer tolerance for map use (~4 m on a 20 km route), where the camera can come close. */
+const GEO_SIMPLIFY_RATIO = 0.0002;
 /** Points on each side used to smooth speed for coloring. */
 const SPEED_SMOOTHING = 5;
 
@@ -35,6 +55,8 @@ export class RouteShape {
     private readonly xs: number[],
     private readonly ys: number[],
     private readonly values: number[] | undefined,
+    /** The same route in geographic coordinates, for maps */
+    readonly geo: GeoRoute,
   ) {}
 
   static fromActivity(
@@ -56,10 +78,23 @@ export class RouteShape {
     const kept = RouteSimplifier.simplify(xs, ys, size * SIMPLIFY_RATIO);
     const values = metric && RouteShape.normalize(kept.map((i) => metric[i]!));
 
+    // Maps zoom in close (3D flyover), so they get a much finer version of the same line
+    const start = distances[range[0]]!;
+    const keptGeo = RouteSimplifier.simplify(xs, ys, size * GEO_SIMPLIFY_RATIO);
+    const geo: GeoRoute = {
+      coordinates: keptGeo.map((i) => [points[i]!.lon!, points[i]!.lat!]),
+      elevations: keptGeo.map((i) => points[i]!.ele),
+      distances: keptGeo.map((i) => distances[range[0] + i]! - start),
+      times: keptGeo.map((i) => points[i]!.time),
+      startDistance: start,
+      values: metric && RouteShape.normalize(keptGeo.map((i) => metric[i]!)),
+    };
+
     return new RouteShape(
       kept.map((i) => xs[i]!),
       kept.map((i) => ys[i]!),
       values,
+      geo,
     );
   }
 

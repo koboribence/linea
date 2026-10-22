@@ -19,8 +19,9 @@ export class DesignStorage {
   }
 
   static save(design: PosterDesign): void {
+    // The title and a typed-in date belong to one activity; the photo is never stored
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { title, photo, ...remembered } = design;
+    const { title, photo, manualDate, ...remembered } = design;
     DesignStorage.write(remembered);
   }
 

@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0E0F12" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Map servers: open the connections early, so the first map tiles arrive sooner -->
+    <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
+    <link rel="preconnect" href="https://elevation-tiles-prod.s3.amazonaws.com" crossorigin />
+    <link rel="dns-prefetch" href="https://tiles.maps.eox.at" />
     <title>Linea</title>
   </head>
   <body>

@@ -8,6 +8,8 @@ interface PosterCanvasProps {
   /** When set, dragging the preview moves the background photo by (dx, dy) poster pixels. */
   onPan?: (dx: number, dy: number) => void;
   panLabel?: string;
+  /** Short message over the preview, e.g. while the map loads */
+  status?: string;
 }
 
 /** Arrow keys move the photo by this many poster pixels. */
@@ -17,7 +19,7 @@ const KEY_STEP = 24;
  * Live preview. The canvas always has the full export resolution (e.g. 1080×1920);
  * CSS only scales it down, so what you see is exactly what gets downloaded.
  */
-export function PosterCanvas({ scene, canvasRef, onPan, panLabel }: PosterCanvasProps) {
+export function PosterCanvas({ scene, canvasRef, onPan, panLabel, status }: PosterCanvasProps) {
   const lastPointer = useRef<{ x: number; y: number }>(undefined);
 
   useEffect(() => {
@@ -97,6 +99,11 @@ export function PosterCanvas({ scene, canvasRef, onPan, panLabel }: PosterCanvas
         onPointerCancel={handlePointerUp}
         onKeyDown={handleKeyDown}
       />
+      {status && (
+        <p className="frame-status" role="status">
+          {status}
+        </p>
+      )}
     </div>
   );
 }

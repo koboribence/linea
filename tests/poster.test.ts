@@ -1,3 +1,4 @@
+import { Activity } from '../src/domain/activity/Activity';
 import { describe, expect, it } from 'vitest';
 import { StatPresenter } from '../src/domain/format/StatPresenter';
 import { UnitFormatter } from '../src/domain/format/UnitFormatter';
@@ -17,10 +18,16 @@ describe('PosterDefaults', () => {
     expect(PosterDefaults.defaultStats('run', [...all])).toEqual([
       'distance',
       'avgPace',
+      'avgSpeed',
       'movingTime',
       'elevationGain',
     ]);
-    expect(PosterDefaults.defaultStats('ride', [...all])).toContain('avgSpeed');
+    expect(PosterDefaults.defaultStats('ride', [...all])).toEqual([
+      'distance',
+      'avgSpeed',
+      'movingTime',
+      'elevationGain',
+    ]);
   });
 
   it('picks effort stats for indoor activities, not elevation', () => {
@@ -50,6 +57,26 @@ describe('PosterDefaults', () => {
   });
 });
 
+describe('stat picks per sport', () => {
+  const runner = (stats?: Parameters<typeof PosterDefaults.create>[2]) =>
+    PosterDefaults.create(
+      new Activity({ sport: 'run', sourceFormat: 'gpx' }, [{ lat: 47, lon: 19 }]),
+      ['distance', 'avgPace', 'avgSpeed', 'movingTime', 'elevationGain', 'avgPower'],
+      stats,
+    ).stats;
+
+  it('shows km/h to runners by default, next to pace', () => {
+    expect(runner()).toEqual(['distance', 'avgPace', 'avgSpeed', 'movingTime', 'elevationGain']);
+  });
+
+  it('carries picks over only from the same sport', () => {
+    expect(runner({ stats: ['avgPower'], statsSport: 'ride' })).not.toContain('avgPower');
+    expect(runner({ stats: ['distance'], statsSport: 'run' })).toEqual(['distance']);
+    // Stored before sports were tracked: treated as another sport
+    expect(runner({ stats: ['avgPower'] })).not.toContain('avgPower');
+  });
+});
+
 describe('PosterTheme', () => {
   it('keeps text readable on a custom background', () => {
     expect(PosterTheme.resolve('volt', { background: '#ffffff' }).text).toBe('#0e0f12');
@@ -66,6 +93,13 @@ describe('PosterSceneBuilder', () => {
     // Starts 15:35 local time in Newfoundland
     const ride = await loadFixture('Edge810-Vector-2013-08-16-15-35-10.fit');
     expect(builder.autoTitle(ride)).toBe('Délutáni kerékpározás');
+  });
+
+  it('uses a typed-in date when the file has none', () => {
+    const undated = new Activity({ sport: 'run', sourceFormat: 'gpx' }, [{ lat: 47, lon: 19 }]);
+    const design = { ...PosterDefaults.create(undated, []), manualDate: '2026-10-19' };
+    const scene = builder.build({ activity: undated, design, statItems: [], brandName: 'Linea' });
+    expect(scene.eyebrow).toBe('2026. október 19. · Futás');
   });
 
   it('shows the date and the sport independently above the title', async () => {

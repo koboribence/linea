@@ -13,6 +13,8 @@ import { RouteShape } from '../../domain/route/RouteShape';
 import { StatsCalculator } from '../../domain/stats/StatsCalculator';
 import { useLocale } from '../../i18n/LocaleContext';
 import { DesignStorage } from './DesignStorage';
+import { toScreenRoute } from '../map/toScreenRoute';
+import { useMapSnapshot } from '../map/useMapSnapshot';
 import { PhotoLoader } from './PhotoLoader';
 
 const calculator = new StatsCalculator();
@@ -26,7 +28,7 @@ function closePhoto(photo: PhotoImage | undefined): void {
  * Editor state for one loaded activity: the design, the sport override and the derived scene.
  * Expensive parts (stats, route geometry) are recomputed only when their inputs change.
  */
-export function usePosterEditor(loaded: Activity) {
+export function usePosterEditor(loaded: Activity, mode: 'image' | 'video' = 'image') {
   const { i18n, format } = useLocale();
   const [sport, setSportState] = useState<SportType>(loaded.sport);
 
@@ -71,7 +73,11 @@ export function usePosterEditor(loaded: Activity) {
   const [photo, setPhotoImage] = useState<PhotoImage>();
   useEffect(() => () => closePhoto(photo), [photo]);
 
-  const scene = useMemo(
+  // Only the chosen background reaches the image: a loaded photo stays ready but unused otherwise
+  const usePhoto = design.background === 'photo' && photo !== undefined;
+  // The still map is only needed for images; video mode runs its own live map
+  const useMap = mode === 'image' && design.background === 'map' && route !== undefined;
+  const baseScene = useMemo(
     () =>
       builder.build({
         activity,
@@ -79,25 +85,46 @@ export function usePosterEditor(loaded: Activity) {
         statItems,
         route,
         elevation,
-        photo,
+        photo: usePhoto ? photo : undefined,
+        map: useMap ? {} : undefined,
         brandName: BRAND.name,
       }),
-    [builder, activity, design, statItems, route, elevation, photo],
+    [builder, activity, design, statItems, route, elevation, photo, usePhoto, useMap],
   );
+  const mapSnapshot = useMapSnapshot(useMap, route, baseScene, design.mapStyle);
+  const scene = useMemo(() => {
+    const still = mapSnapshot.result;
+    const geo = route?.geo;
+    // A previous map stays on screen while the next renders, if the route still lines up with it
+    const fits =
+      still &&
+      geo &&
+      still.image.width === baseScene.width &&
+      still.image.height === baseScene.height &&
+      still.points.length === geo.coordinates.length;
+    if (!baseScene.map || !fits) return baseScene;
+    const points = toScreenRoute(still.points, geo.values);
+    return { ...baseScene, map: { ...baseScene.map, image: still.image, route: points } };
+  }, [baseScene, mapSnapshot.result, route]);
 
   /** Resolves to false when the file isn't a readable image. */
   const setPhoto = useCallback(async (file: File): Promise<boolean> => {
     try {
       const image = await PhotoLoader.load(file);
       setPhotoImage(image);
-      setDesign((current) => ({ ...current, photo: PhotoPlacement.DEFAULTS }));
+      setDesign((current) => ({ ...current, photo: PhotoPlacement.DEFAULTS, background: 'photo' }));
       return true;
     } catch {
       return false;
     }
   }, []);
 
-  const removePhoto = useCallback(() => setPhotoImage(undefined), []);
+  const removePhoto = useCallback(() => {
+    setPhotoImage(undefined);
+    setDesign((current) =>
+      current.background === 'photo' ? { ...current, background: 'theme' } : current,
+    );
+  }, []);
 
   /** Drag on the preview: (dx, dy) in poster pixels. */
   const panPhoto = useCallback(
@@ -118,15 +145,27 @@ export function usePosterEditor(loaded: Activity) {
 
   const setSport = useCallback((next: SportType) => {
     setSportState(next);
-    setDesign((current) => ({ ...current, stats: PosterDefaults.adaptStats(current.stats, next) }));
+    setDesign((current) => ({
+      ...current,
+      stats: PosterDefaults.adaptStats(current.stats, next),
+      statsSport: next,
+    }));
   }, []);
 
   return {
     activity,
+    stats,
     design,
     update,
     setSport,
     scene,
+    builder,
+    route,
+    elevation,
+    mapLoading: useMap && mapSnapshot.loading,
+    mapFailed: useMap && mapSnapshot.failed,
+    /** The date line needs a start time; some files (e.g. planned routes) have none */
+    hasDate: activity.startTime !== undefined,
     hasPhoto: photo !== undefined,
     setPhoto,
     removePhoto,

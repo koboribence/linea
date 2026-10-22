@@ -2,8 +2,9 @@ import type { Activity } from '../activity/Activity';
 import type { StatItem } from '../format/StatPresenter';
 import { UnitFormatter } from '../format/UnitFormatter';
 import type { ElevationProfile } from '../route/ElevationProfile';
-import type { RouteShape } from '../route/RouteShape';
+import type { RouteShape, ScreenPoint } from '../route/RouteShape';
 import type { MessageKey } from '../../i18n/messages/hu';
+import { MapStyles } from '../map/MapStyles';
 import type { PhotoSettings } from './PhotoPlacement';
 import { PosterFonts, type PosterFont } from './PosterFont';
 import type { PosterDesign } from './PosterDesign';
@@ -40,6 +41,21 @@ export interface PosterScene {
   routeWidth: number;
   elevation?: ElevationProfile;
   logo?: string;
+  /**
+   * 3D map background. `route` holds the route already projected onto the map (screen pixels);
+   * without `image` the map is composited underneath afterwards (video frames).
+   */
+  map?: {
+    image?: PhotoImage;
+    route?: ScreenPoint[];
+    /** False when the route's start is out of view (no start ring then) */
+    showStart?: boolean;
+    attribution: string[];
+  };
+  /** Stats block opacity, for fading it in on video (default 1) */
+  statsOpacity?: number;
+  /** Position marker on the elevation profile, 0…1 (video) */
+  elevationMarker?: number;
 }
 
 export interface SceneInput {
@@ -51,6 +67,8 @@ export interface SceneInput {
   elevation?: ElevationProfile;
   /** The user's background photo, if any */
   photo?: PhotoImage;
+  /** Use the 3D map as background: the rendered still (none for video) and the projected route */
+  map?: { image?: PhotoImage; route?: ScreenPoint[]; showStart?: boolean };
   brandName: string;
 }
 
@@ -62,7 +80,7 @@ export class PosterSceneBuilder {
   ) {}
 
   build(input: SceneInput): PosterScene {
-    const { activity, design, statItems, route, elevation, photo, brandName } = input;
+    const { activity, design, statItems, route, elevation, photo, map, brandName } = input;
     const size = POSTER_FORMATS[design.format];
     const byId = new Map(statItems.map((item) => [item.id, item]));
 
@@ -74,9 +92,10 @@ export class PosterSceneBuilder {
       }),
       font: PosterFonts.PRESETS[design.fontId],
       // A photo fills the background, so the image can't be a transparent sticker at the same time
-      transparent: design.transparent && !photo,
+      transparent: design.transparent && design.background === 'theme' && !photo && !map,
+      map: map && { ...map, attribution: MapStyles.attribution(design.mapStyle) },
       photo: photo && { image: photo, settings: design.photo },
-      eyebrow: this.eyebrow(activity, design.showDate, design.showSport),
+      eyebrow: this.eyebrow(activity, design),
       title: design.title?.trim() || this.autoTitle(activity),
       stats: design.stats.flatMap((id) => {
         const item = byId.get(id);
@@ -102,13 +121,21 @@ export class PosterSceneBuilder {
   }
 
   /** The small line above the title: date and/or sport, each switchable. Undefined when empty. */
-  private eyebrow(activity: Activity, showDate: boolean, showSport: boolean): string | undefined {
-    const start = activity.startTime;
+  private eyebrow(activity: Activity, design: PosterDesign): string | undefined {
     const parts = [
-      showDate && start ? this.format.day(start, activity.meta.timeZone) : undefined,
-      showSport ? this.t(`sport.${activity.sport}`) : undefined,
+      design.showDate ? this.date(activity, design.manualDate) : undefined,
+      design.showSport ? this.t(`sport.${activity.sport}`) : undefined,
     ].filter(Boolean);
     return parts.length > 0 ? parts.join(' · ') : undefined;
+  }
+
+  /** The activity's own date, or the one the user typed in when the file has none. */
+  private date(activity: Activity, manualDate: string | undefined): string | undefined {
+    const start = activity.startTime;
+    if (start) return this.format.day(start, activity.meta.timeZone);
+    if (!manualDate || !/^\d{4}-\d{2}-\d{2}$/.test(manualDate)) return undefined;
+    // Noon, so no time zone can push it to the neighboring day
+    return this.format.day(new Date(`${manualDate}T12:00:00`));
   }
 
   private static daypart(hour: number): MessageKey {
