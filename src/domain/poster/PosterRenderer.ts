@@ -111,7 +111,7 @@ export class PosterRenderer {
 
     const hero = scene.route ? undefined : scene.stats[0];
     const gridStats = hero ? scene.stats.slice(1) : scene.stats;
-    const bottom = scene.logo ? this.logoBaseline() - 64 * u : scene.height - this.padBottom;
+    const bottom = scene.logo ? this.logoBaseline() - 80 * u : scene.height - this.padBottom;
     const middleTop = title.bottom + 56 * u;
 
     // Many stats can crowd out the route: shrink them until the middle keeps its share

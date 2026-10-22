@@ -220,7 +220,7 @@ A rajzoló két lépésben dolgozik: a `layout()` kiszámolja a dobozokat, a `dr
 - **Story:** 200u felül és 230u alul, mert az Instagram oda rajzolja a felhasználónevet és a folyamatjelzőt, illetve az üzenetmezőt;
 - **Feed és Négyzet:** 100u felül és 72u alul.
 
-A logó az alsó margó határán ül, az adatok fölötte.
+A logó az alsó margó határán ül, vízszintesen középen; az adatok fölötte vannak.
 
 | Elem | Elrendezés |
 |---|---|
@@ -228,7 +228,7 @@ A logó az alsó margó határán ül, az adatok fölötte.
 | **Cím** | Barlow Condensed 800 dőlt, nagybetűs. Story-ban 136u-ról, máshol 112u-ról indul, és addig kicsinyedik (legfeljebb 60u-ig), amíg 2 sorba nem fér. Ha így sem fér, vagy egyetlen szó hosszabb a sornál, „…”-tal rövidül. |
 | **Adatok** | Alul, elválasztó vonal fölött. Oszlopszám: legfeljebb 3 adatnál annyi, ahány adat; 4 adatnál Story-ban 2×2, máshol 4 egy sorban; 5–6 adatnál 3 oszlop, 2 sor. A címkék és az értékek zsugorodnak, amíg a legszélesebb is elfér az oszlopában, így vízszintesen soha nem lógnak egymásba. **Középre igazítás:** ha az utolsó sor nem teljes (pl. 5 adatnál 3 + 2), vagy csak 1 adat van, a hiányos sor középre kerül, és a cellákon belül is középre igazodik a szöveg. Teljes soroknál balra igazít. |
 | **Hely az útvonalnak** | Ha az adatok miatt a középső rész a képmagasság 24%-a alá szorulna, az adatok 10%-os lépésekben kisebbek lesznek (legfeljebb a felükre), amíg az útvonalnak elég hely marad. |
-| **Logó** | Bal alul. A márka neve útvonalszerű aláhúzással, rajtkarikával és célponttal. |
+| **Logó** | Alul, vízszintesen középen. A márka neve útvonalszerű aláhúzással, rajtkarikával és célponttal. |
 | **Magasságprofil** | Az adatok fölött. Csak akkor kerül a képre, ha utána is marad legalább a képmagasság 22%-a az útvonalnak. Ezért négyzetes formátumban jellemzően elmarad. |
 | **Útvonal** | A maradék középső dobozban, a vonalvastagság kétszeresével beljebb húzva. |
 | **„Hős” elrendezés** | Ha nincs útvonal (GPS nélkül, vagy ha a privacy zone mindent elrejtett), az első kiválasztott adat kerül nagyban középre, kiemelő színnel; a többi alul marad. A nagy szám a középső rész szélességéhez és magasságához is igazodik, így nem ér bele a címbe. |
