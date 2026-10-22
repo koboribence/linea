@@ -66,6 +66,23 @@ describe('PosterSceneBuilder', () => {
     expect(builder.autoTitle(ride)).toBe('Délutáni kerékpározás');
   });
 
+  it('shows the date and the sport independently above the title', async () => {
+    const ride = await loadFixture('Edge810-Vector-2013-08-16-15-35-10.fit');
+    const base = PosterDefaults.create(ride, []);
+    const eyebrow = (showDate: boolean, showSport: boolean) =>
+      builder.build({
+        activity: ride,
+        design: { ...base, showDate, showSport },
+        statItems: [],
+        brandName: 'Linea',
+      }).eyebrow;
+
+    expect(eyebrow(true, true)).toBe('2013. augusztus 16. · Kerékpár');
+    expect(eyebrow(true, false)).toBe('2013. augusztus 16.');
+    expect(eyebrow(false, true)).toBe('Kerékpár');
+    expect(eyebrow(false, false)).toBeUndefined();
+  });
+
   it('uses the chosen stats in order, formatted', async () => {
     const run = await loadFixture('test.tcx');
     const items = new StatPresenter(new UnitFormatter('hu-HU'))

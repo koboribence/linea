@@ -11,8 +11,7 @@ export class UnitFormatter {
   private readonly decimals0: Intl.NumberFormat;
   private readonly decimals1: Intl.NumberFormat;
   private readonly decimals2: Intl.NumberFormat;
-  private readonly dateTime: Intl.DateTimeFormat;
-  private readonly zonedDates = new Map<string, Intl.DateTimeFormat>();
+  private readonly dateFormats = new Map<string, Intl.DateTimeFormat>();
 
   constructor(readonly locale: string) {
     const number = (digits: number) =>
@@ -23,7 +22,6 @@ export class UnitFormatter {
     this.decimals0 = number(0);
     this.decimals1 = number(1);
     this.decimals2 = number(2);
-    this.dateTime = new Intl.DateTimeFormat(locale, { dateStyle: 'long', timeStyle: 'short' });
   }
 
   distance(meters: number): FormattedValue {
@@ -74,7 +72,12 @@ export class UnitFormatter {
 
   /** Date and time in the given zone (the activity's), or the browser's zone if unknown. */
   date(date: Date, timeZone?: string): string {
-    return this.dateFormatFor(timeZone).format(date);
+    return this.dateFormatFor(timeZone, true).format(date);
+  }
+
+  /** Date only: "2013. augusztus 16." / "16 August 2013". */
+  day(date: Date, timeZone?: string): string {
+    return this.dateFormatFor(timeZone, false).format(date);
   }
 
   /** Hour of day (0–23) in the given zone. */
@@ -87,16 +90,17 @@ export class UnitFormatter {
     return Number(parts.find((p) => p.type === 'hour')?.value ?? date.getHours());
   }
 
-  private dateFormatFor(timeZone: string | undefined): Intl.DateTimeFormat {
-    if (!timeZone) return this.dateTime;
-    let format = this.zonedDates.get(timeZone);
+  /** Intl formatters are slow to create, so one is kept per zone and style. */
+  private dateFormatFor(timeZone: string | undefined, withTime: boolean): Intl.DateTimeFormat {
+    const key = `${timeZone ?? ''}|${withTime}`;
+    let format = this.dateFormats.get(key);
     if (!format) {
       format = new Intl.DateTimeFormat(this.locale, {
         dateStyle: 'long',
-        timeStyle: 'short',
+        timeStyle: withTime ? 'short' : undefined,
         timeZone,
       });
-      this.zonedDates.set(timeZone, format);
+      this.dateFormats.set(key, format);
     }
     return format;
   }

@@ -107,7 +107,8 @@ export const en: Messages = {
   'font.editorial': 'Editorial',
   'font.halloween': 'Halloween',
   'font.seasonal': 'Seasonal',
-  'editor.showDate': 'Date and sport',
+  'editor.showDate': 'Date',
+  'editor.showSport': 'Sport',
 
   'editor.stats': 'Stats on the image',
   'editor.statsHint': 'Up to {max}, in the order you pick them.',

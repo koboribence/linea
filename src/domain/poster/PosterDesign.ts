@@ -19,7 +19,10 @@ export interface PosterDesign {
   transparent: boolean;
   /** Starts as the activity's own name; undefined = automatic title ("Morning Run") */
   title?: string;
+  /** Date (no time) above the title */
   showDate: boolean;
+  /** Sport name above the title */
+  showSport: boolean;
   /** Shown stats in order, at most PosterDefaults.MAX_STATS */
   stats: StatId[];
   routeColoring: RouteColoring;
@@ -74,6 +77,7 @@ export class PosterDefaults {
     fontId: 'sport',
     transparent: false,
     showDate: true,
+    showSport: true,
     routeColoring: 'speed',
     routeWidth: 10,
     privacyMeters: 200,

@@ -17,5 +17,5 @@ import '@fontsource/oxanium/700.css';
 import '@fontsource/oxanium/800.css';
 import '@fontsource/playfair-display/900-italic.css';
 import '@fontsource/dm-serif-display/400.css';
-import '@fontsource/nosifer/400.css';
+import '@fontsource/butcherman/400.css';
 import '@fontsource/metal-mania/400.css';

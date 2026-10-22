@@ -76,7 +76,7 @@ export class PosterSceneBuilder {
       // A photo fills the background, so the image can't be a transparent sticker at the same time
       transparent: design.transparent && !photo,
       photo: photo && { image: photo, settings: design.photo },
-      eyebrow: design.showDate ? this.eyebrow(activity) : undefined,
+      eyebrow: this.eyebrow(activity, design.showDate, design.showSport),
       title: design.title?.trim() || this.autoTitle(activity),
       stats: design.stats.flatMap((id) => {
         const item = byId.get(id);
@@ -101,10 +101,14 @@ export class PosterSceneBuilder {
     });
   }
 
-  private eyebrow(activity: Activity): string {
-    const sport = this.t(`sport.${activity.sport}`);
+  /** The small line above the title: date and/or sport, each switchable. Undefined when empty. */
+  private eyebrow(activity: Activity, showDate: boolean, showSport: boolean): string | undefined {
     const start = activity.startTime;
-    return start ? `${this.format.date(start, activity.meta.timeZone)} · ${sport}` : sport;
+    const parts = [
+      showDate && start ? this.format.day(start, activity.meta.timeZone) : undefined,
+      showSport ? this.t(`sport.${activity.sport}`) : undefined,
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(' · ') : undefined;
   }
 
   private static daypart(hour: number): MessageKey {

@@ -107,7 +107,8 @@ export const hu = {
   'font.editorial': 'Magazin',
   'font.halloween': 'Halloween',
   'font.seasonal': 'Szezonális',
-  'editor.showDate': 'Dátum és sportág',
+  'editor.showDate': 'Dátum',
+  'editor.showSport': 'Sportág',
 
   'editor.stats': 'Adatok a képen',
   'editor.statsHint': 'Legfeljebb {max}, a kiválasztás sorrendjében.',

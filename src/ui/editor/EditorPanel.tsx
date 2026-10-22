@@ -110,6 +110,11 @@ export function EditorPanel(props: EditorPanelProps) {
           checked={design.showDate}
           onChange={(showDate) => update({ showDate })}
         />
+        <Toggle
+          label={t('editor.showSport')}
+          checked={design.showSport}
+          onChange={(showSport) => update({ showSport })}
+        />
       </Section>
 
       <Section

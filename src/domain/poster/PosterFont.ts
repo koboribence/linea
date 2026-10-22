@@ -75,14 +75,14 @@ export class PosterFonts {
       titleDescent: 0.26,
     },
     halloween: {
-      title: { family: `Nosifer, fantasy, ${EMOJI}`, weight: 400 },
+      title: { family: `Butcherman, fantasy, ${EMOJI}`, weight: 400 },
       value: { family: '"Metal Mania", fantasy', weight: 400 },
       label: { family: INTER, weight: 600 },
       uppercase: true,
-      titleScale: 0.58,
-      titleAscent: 0.86,
-      titleLineHeight: 1.18,
-      titleDescent: 0.36,
+      titleScale: 0.9,
+      titleAscent: 1.0, // its big accents need room above the capitals
+      titleLineHeight: 1.08,
+      titleDescent: 0.26,
       seasonal: true,
     },
   };

@@ -61,7 +61,8 @@ Három réteg, mindegyik egy dologért felel:
 | `customBackground`, `customAccent` | Saját szín, felülírja a témáét | – |
 | `transparent` | Átlátszó háttér: matrica a saját fotóra | `false` |
 | `title` | A cím; legfeljebb 50 látható karakter (`MAX_TITLE`), emojival is. `undefined` esetén automatikus | a fájlban szereplő név |
-| `showDate` | Dátum és sportág a cím fölött | `true` |
+| `showDate` | Dátum a cím fölött, pontos idő nélkül (pl. „2013. augusztus 16.”) | `true` |
+| `showSport` | Sportág a cím fölött, a dátumtól függetlenül kapcsolható | `true` |
 | `stats` | A képen szereplő adatok, sorrendben, legfeljebb 6 (`MAX_STATS`) | 4 db, sportágfüggő |
 | `routeColoring` | `solid`, `speed`, `elevation` vagy `heartRate` | `speed` |
 | `routeWidth` | Vonalvastagság px-ben, 1080 px széles képre | `10` |
@@ -143,7 +144,7 @@ Egy készlet ([PosterFont.ts](../src/domain/poster/PosterFont.ts)) három szerep
 | Kézírás | Pacifico | Quicksand 700 | Quicksand 700 | Kisbetűs cím |
 | Sci-fi | Oxanium 800 | Oxanium 700 | Oxanium 600 | Nagybetűs |
 | Magazin | Playfair Display 900 dőlt | DM Serif Display | Inter 600 | A Playfair számjegyei „régies” stílusúak (fel-le ugrálnak), ezért a számok DM Serifet kapnak |
-| Halloween 🎃 | Nosifer | Metal Mania | Inter 600 | Szezonális (`seasonal: true`) |
+| Halloween 🎃 | Butcherman | Metal Mania | Inter 600 | Szezonális (`seasonal: true`). Nagy ékezetei miatt a cím több helyet kap felül |
 
 **Kiválasztási szempontok:**
 - **Licenc:** mindegyik OFL, és a [Fontsource](https://fontsource.org) csomagokból a saját oldalunkról töltődik (nem a Google-től).
@@ -215,14 +216,20 @@ Minden méret 1080 px szélességre van megtervezve, és az `u = szélesség / 1
 
 A rajzoló két lépésben dolgozik: a `layout()` kiszámolja a dobozokat, a `draw()` rajzol.
 
+**Biztonsági margók:** az oldalsó margó 80u. Felül és alul formátumonként eltér:
+- **Story:** 200u felül és 230u alul, mert az Instagram oda rajzolja a felhasználónevet és a folyamatjelzőt, illetve az üzenetmezőt;
+- **Feed és Négyzet:** 100u felül és 72u alul.
+
+A logó az alsó margó határán ül, az adatok fölötte.
+
 | Elem | Elrendezés |
 |---|---|
-| **Felső sor** | Dátum · sportág, Inter 26u, kiemelő színnel. |
+| **Felső sor** | Dátum · sportág, külön-külön kapcsolhatóan, a készlet címkebetűjével, kiemelő színnel. Ha mindkettő ki van kapcsolva, a sor elmarad. |
 | **Cím** | Barlow Condensed 800 dőlt, nagybetűs. Story-ban 136u-ról, máshol 112u-ról indul, és addig kicsinyedik (legfeljebb 60u-ig), amíg 2 sorba nem fér. Ha így sem fér, vagy egyetlen szó hosszabb a sornál, „…”-tal rövidül. |
 | **Adatok** | Alul, elválasztó vonal fölött. Oszlopszám: legfeljebb 3 adatnál annyi, ahány adat; 4 adatnál Story-ban 2×2, máshol 4 egy sorban; 5–6 adatnál 3 oszlop, 2 sor. A címkék és az értékek zsugorodnak, amíg a legszélesebb is elfér az oszlopában, így vízszintesen soha nem lógnak egymásba. **Középre igazítás:** ha az utolsó sor nem teljes (pl. 5 adatnál 3 + 2), vagy csak 1 adat van, a hiányos sor középre kerül, és a cellákon belül is középre igazodik a szöveg. Teljes soroknál balra igazít. |
 | **Hely az útvonalnak** | Ha az adatok miatt a középső rész a képmagasság 24%-a alá szorulna, az adatok 10%-os lépésekben kisebbek lesznek (legfeljebb a felükre), amíg az útvonalnak elég hely marad. |
 | **Logó** | Bal alul. A márka neve útvonalszerű aláhúzással, rajtkarikával és célponttal. |
-| **Magasságprofil** | Az adatok fölött. Csak akkor kerül a képre, ha utána is marad legalább a képmagasság 26%-a az útvonalnak. Ezért négyzetes formátumban jellemzően elmarad. |
+| **Magasságprofil** | Az adatok fölött. Csak akkor kerül a képre, ha utána is marad legalább a képmagasság 22%-a az útvonalnak. Ezért négyzetes formátumban jellemzően elmarad. |
 | **Útvonal** | A maradék középső dobozban, a vonalvastagság kétszeresével beljebb húzva. |
 | **„Hős” elrendezés** | Ha nincs útvonal (GPS nélkül, vagy ha a privacy zone mindent elrejtett), az első kiválasztott adat kerül nagyban középre, kiemelő színnel; a többi alul marad. A nagy szám a középső rész szélességéhez és magasságához is igazodik, így nem ér bele a címbe. |
 

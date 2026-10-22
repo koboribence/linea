@@ -31,6 +31,15 @@ describe('UnitFormatter', () => {
     expect(hu.date(date, '+02:00')).toContain('20:05');
     expect(UnitFormatter.hour(date, 'Europe/Budapest')).toBe(20);
   });
+
+  it('formats the day without the time', () => {
+    const date = new Date('2013-08-16T18:05:10Z');
+    expect(hu.day(date, 'America/St_Johns')).toBe('2013. augusztus 16.');
+    // Late evening in Newfoundland is already the next day in UTC
+    expect(hu.day(new Date('2013-08-17T01:00:00Z'), 'America/St_Johns')).toBe(
+      '2013. augusztus 16.',
+    );
+  });
 });
 
 describe('StatPresenter', () => {

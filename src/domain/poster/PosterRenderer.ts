@@ -49,7 +49,11 @@ interface Layout {
  */
 export class PosterRenderer {
   private readonly u: number;
+  /** Side margin */
   private readonly pad: number;
+  /** Top and bottom margins: larger on stories, where Instagram overlays its own UI */
+  private readonly padTop: number;
+  private readonly padBottom: number;
   private readonly accent: Color;
   private readonly font: PosterFont;
 
@@ -59,6 +63,10 @@ export class PosterRenderer {
   ) {
     this.u = scene.width / BASE_WIDTH;
     this.pad = 80 * this.u;
+    // Story: profile name and progress bar on top, reply bar at the bottom
+    const isStory = scene.height / scene.width > 1.5;
+    this.padTop = (isStory ? 200 : 100) * this.u;
+    this.padBottom = (isStory ? 230 : 72) * this.u;
     this.accent = Color.parse(scene.colors.accent);
     this.font = scene.font;
   }
@@ -103,7 +111,7 @@ export class PosterRenderer {
 
     const hero = scene.route ? undefined : scene.stats[0];
     const gridStats = hero ? scene.stats.slice(1) : scene.stats;
-    const bottom = scene.logo ? scene.height - 150 * u : scene.height - pad;
+    const bottom = scene.logo ? this.logoBaseline() - 64 * u : scene.height - this.padBottom;
     const middleTop = title.bottom + 56 * u;
 
     // Many stats can crowd out the route: shrink them until the middle keeps its share
@@ -122,7 +130,7 @@ export class PosterRenderer {
     if (scene.elevation) {
       const height = (isStory ? 150 : 100) * u;
       const remaining = middleBottom - height - 40 * u - middleTop;
-      if (remaining >= scene.height * 0.26) {
+      if (remaining >= scene.height * 0.22) {
         elevation = { x: pad, y: middleBottom - height, width: scene.width - 2 * pad, height };
         middleBottom -= height + 40 * u;
       }
@@ -141,7 +149,7 @@ export class PosterRenderer {
   private layoutTitle(isStory: boolean): TitleLayout {
     const { u, pad, scene } = this;
     const maxWidth = scene.width - 2 * pad;
-    const top = scene.eyebrow ? pad + 26 * u + 22 * u : pad;
+    const top = scene.eyebrow ? this.padTop + 26 * u + 22 * u : this.padTop;
     const font = this.font;
     const text = font.uppercase ? scene.title.toLocaleUpperCase() : scene.title;
     const max = (isStory ? 136 : 112) * u * font.titleScale;
@@ -248,7 +256,7 @@ export class PosterRenderer {
     ctx.textAlign = 'left';
     this.textShadow();
 
-    let y = pad;
+    let y = this.padTop;
     if (scene.eyebrow) {
       this.setFont(PosterFonts.css(this.font.label, 26 * u), 3 * u);
       ctx.fillStyle = scene.colors.accent;
@@ -422,7 +430,7 @@ export class PosterRenderer {
 
   private drawLogo(name: string): void {
     const { ctx, u, pad, scene } = this;
-    const baseline = scene.height - 66 * u;
+    const baseline = this.logoBaseline();
     this.textShadow();
     this.setFont(PosterFonts.css(LOGO_FONT, 38 * u));
     ctx.fillStyle = scene.colors.text;
@@ -449,6 +457,11 @@ export class PosterRenderer {
     ctx.beginPath();
     ctx.arc(pad + 4 * u, y, 4 * u, 0, Math.PI * 2);
     ctx.stroke();
+  }
+
+  /** The logo sits at the bottom edge of the safe area. */
+  private logoBaseline(): number {
+    return this.scene.height - this.padBottom - 16 * this.u;
   }
 
   // ── Text helpers ──────────────────────────────────────────────────────
