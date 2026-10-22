@@ -136,15 +136,19 @@ export class PosterDefaults {
     return chosen.slice(0, PosterDefaults.DEFAULT_STAT_COUNT);
   }
 
-  /** Swaps pace ↔ speed stats in place, so a sport change keeps the user's layout. */
+  /**
+   * Swaps pace ↔ speed stats in place, so a sport change keeps the user's layout.
+   * Runners may also show km/h, so a pick that already has both doesn't end up doubled.
+   */
   static adaptStats(stats: StatId[], sport: SportType): StatId[] {
-    return stats.map((id) => {
+    const swapped = stats.map((id) => {
       for (const [pace, speed] of PACE_SPEED_PAIRS) {
         if (sport === 'run' && id === speed) return pace;
         if (sport !== 'run' && id === pace) return speed;
       }
       return id;
     });
+    return swapped.filter((id, i) => swapped.indexOf(id) === i);
   }
 
   /** Route colorings that have data behind them. */

@@ -45,6 +45,8 @@ describe('PosterDefaults', () => {
       'avgSpeed',
     ]);
     expect(PosterDefaults.adaptStats(['maxSpeed'], 'run')).toEqual(['bestPace']);
+    // A runner who picked both pace and km/h doesn't get a duplicate after switching
+    expect(PosterDefaults.adaptStats(['avgPace', 'avgSpeed'], 'ride')).toEqual(['avgSpeed']);
   });
 });
 

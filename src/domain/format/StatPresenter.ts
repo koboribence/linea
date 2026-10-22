@@ -51,13 +51,11 @@ export class StatPresenter {
           item('distance', stats.distance, (v) => f.distance(v)),
           item('movingTime', stats.movingTime, (v) => f.duration(v)),
           item('elapsedTime', stats.elapsedTime, (v) => f.duration(v)),
-          // Runners read pace, cyclists read speed
-          run
-            ? item('avgPace', stats.avgSpeed, (v) => f.pace(v))
-            : item('avgSpeed', stats.avgSpeed, (v) => f.speed(v)),
-          run
-            ? item('bestPace', stats.maxSpeed, (v) => f.pace(v))
-            : item('maxSpeed', stats.maxSpeed, (v) => f.speed(v)),
+          // Runners read pace first, but km/h is offered to them too; cyclists only use speed
+          run ? item('avgPace', stats.avgSpeed, (v) => f.pace(v)) : undefined,
+          run ? item('bestPace', stats.maxSpeed, (v) => f.pace(v)) : undefined,
+          item('avgSpeed', stats.avgSpeed, (v) => f.speed(v)),
+          item('maxSpeed', stats.maxSpeed, (v) => f.speed(v)),
           item('calories', stats.calories, (v) => f.calories(v)),
         ],
       },
