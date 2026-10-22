@@ -12,6 +12,7 @@ export class UnitFormatter {
   private readonly decimals1: Intl.NumberFormat;
   private readonly decimals2: Intl.NumberFormat;
   private readonly dateTime: Intl.DateTimeFormat;
+  private readonly zonedDates = new Map<string, Intl.DateTimeFormat>();
 
   constructor(readonly locale: string) {
     const number = (digits: number) =>
@@ -57,8 +58,10 @@ export class UnitFormatter {
     return { value: this.decimals0.format(watts), unit: 'W' };
   }
 
+  /** Files store running cadence per leg (strides/min); runners read steps/min, hence × 2. */
   cadence(value: number, sport: SportType): FormattedValue {
-    return { value: this.decimals0.format(value), unit: sport === 'run' ? 'spm' : 'rpm' };
+    if (sport === 'run') return { value: this.decimals0.format(value * 2), unit: 'spm' };
+    return { value: this.decimals0.format(value), unit: 'rpm' };
   }
 
   temperature(celsius: number): FormattedValue {
@@ -69,8 +72,33 @@ export class UnitFormatter {
     return { value: this.decimals0.format(kcal), unit: 'kcal' };
   }
 
-  date(date: Date): string {
-    return this.dateTime.format(date);
+  /** Date and time in the given zone (the activity's), or the browser's zone if unknown. */
+  date(date: Date, timeZone?: string): string {
+    return this.dateFormatFor(timeZone).format(date);
+  }
+
+  /** Hour of day (0–23) in the given zone. */
+  static hour(date: Date, timeZone?: string): number {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      hour: 'numeric',
+      hourCycle: 'h23',
+      timeZone,
+    }).formatToParts(date);
+    return Number(parts.find((p) => p.type === 'hour')?.value ?? date.getHours());
+  }
+
+  private dateFormatFor(timeZone: string | undefined): Intl.DateTimeFormat {
+    if (!timeZone) return this.dateTime;
+    let format = this.zonedDates.get(timeZone);
+    if (!format) {
+      format = new Intl.DateTimeFormat(this.locale, {
+        dateStyle: 'long',
+        timeStyle: 'short',
+        timeZone,
+      });
+      this.zonedDates.set(timeZone, format);
+    }
+    return format;
   }
 
   /** 3725 → "1:02:05", 292 → "4:52" */

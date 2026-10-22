@@ -18,21 +18,19 @@ export const en: Messages = {
 
   'sport.run': 'Run',
   'sport.ride': 'Ride',
-  'sport.other': 'Workout',
+  'sport.other': 'Other',
 
-  'meta.device': 'Device',
+  'title.auto': '{daypart} {activity}',
+  'daypart.night': 'Night',
+  'daypart.morning': 'Morning',
+  'daypart.lunch': 'Lunch',
+  'daypart.afternoon': 'Afternoon',
+  'daypart.evening': 'Evening',
+  'activity.run': 'Run',
+  'activity.ride': 'Ride',
+  'activity.other': 'Workout',
+
   'meta.points': '{count} data points',
-  'meta.noGps': 'No GPS data, so the image will have no route (e.g. treadmill or indoor trainer).',
-
-  'channel.gps': 'GPS',
-  'channel.elevation': 'Elevation',
-  'channel.heartRate': 'Heart rate',
-  'channel.cadence': 'Cadence',
-  'channel.power': 'Power',
-
-  'group.overview': 'Overview',
-  'group.elevation': 'Elevation',
-  'group.sensors': 'Sensors',
 
   'stat.distance': 'Distance',
   'stat.movingTime': 'Moving time',
@@ -53,4 +51,52 @@ export const en: Messages = {
   'stat.maxCadence': 'Max cadence',
   'stat.avgTemperature': 'Temperature',
   'stat.calories': 'Calories',
+
+  'editor.format': 'Format',
+  'format.story': 'Story',
+  'format.feed': 'Feed',
+  'format.square': 'Square',
+
+  'editor.colors': 'Colors',
+  'editor.background': 'Background',
+  'editor.accent': 'Accent',
+  'editor.resetColors': 'Theme colors',
+  'editor.transparent': 'Transparent background',
+  'editor.transparentHint': 'A sticker for your own photo.',
+  'theme.volt': 'Volt',
+  'theme.chalk': 'Chalk',
+  'theme.ocean': 'Ocean',
+  'theme.dusk': 'Dusk',
+  'theme.forest': 'Forest',
+  'theme.graphite': 'Graphite',
+
+  'editor.text': 'Text',
+  'editor.title': 'Title',
+  'editor.showDate': 'Date and sport',
+
+  'editor.stats': 'Stats on the image',
+  'editor.statsHint': 'Up to {max}, in the order you pick them.',
+
+  'editor.route': 'Route',
+  'editor.coloring': 'Coloring',
+  'coloring.solid': 'Solid',
+  'coloring.pace': 'Pace',
+  'coloring.speed': 'Speed',
+  'coloring.elevation': 'Elevation',
+  'coloring.heartRate': 'Heart rate',
+  'editor.lineWidth': 'Line width',
+  'editor.privacy': 'Privacy zone',
+  'editor.privacyHint': 'Hides the start and end of the route, so nobody sees where you live.',
+  'privacy.off': 'Off',
+  'editor.elevation': 'Elevation profile',
+  'editor.noRoute': 'No GPS route, so the main stat goes in the middle of the image.',
+  'editor.privacyHidesRoute':
+    'This activity is so short that the privacy zone hides the whole route. Turn it off or lower it to show the route.',
+
+  'editor.more': 'More',
+  'editor.sport': 'Sport',
+  'editor.logo': 'Logo on the image',
+
+  'export.download': 'Download',
+  'export.share': 'Share',
 };

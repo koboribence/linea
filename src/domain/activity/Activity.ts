@@ -11,6 +11,8 @@ export interface ActivityMeta {
   name?: string;
   /** Recording device or exporting app */
   device?: string;
+  /** Where the activity happened: IANA name ("Europe/Budapest") or UTC offset ("+02:00") */
+  timeZone?: string;
 }
 
 /** A parsed workout: metadata, samples and the device's own summary. Immutable. */
@@ -44,5 +46,10 @@ export class Activity {
     if (this.meta.startTime) return this.meta.startTime;
     const first = this.points.find((p) => p.time !== undefined)?.time;
     return first === undefined ? undefined : new Date(first);
+  }
+
+  /** Copy with changed metadata (e.g. detected sport or time zone); points are shared. */
+  withMeta(changes: Partial<ActivityMeta>): Activity {
+    return new Activity({ ...this.meta, ...changes }, this.points, this.deviceSummary);
   }
 }

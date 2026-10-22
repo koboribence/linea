@@ -26,8 +26,9 @@ export class FitParser extends ActivityParser {
     const { messages, errors } = decoder.read();
     const records = messages.recordMesgs ?? [];
     // Watches that crash mid-activity leave truncated files; keep whatever was decoded
-    if (errors.length > 0 && records.length === 0)
+    if (errors.length > 0 && records.length === 0) {
       throw new ParseError('corrupt', String(errors[0]));
+    }
 
     const sessions = messages.sessionMesgs ?? [];
     const session = sessions[0];
@@ -40,6 +41,7 @@ export class FitParser extends ActivityParser {
         name: messages.sportMesgs?.[0]?.name,
         device: FitParser.deviceName(messages),
         startTime: startTime === undefined ? undefined : new Date(startTime),
+        timeZone: FitParser.utcOffset(messages),
       },
       records.map((r) => FitParser.toPoint(r)),
       // Multisport files have several sessions; their totals don't describe the whole file
@@ -90,6 +92,21 @@ export class FitParser extends ActivityParser {
     const product = fileId.garminProduct ?? fileId.product;
     const name = [manufacturer, product === undefined ? '' : String(product)].join(' ').trim();
     return name || undefined;
+  }
+
+  /** The device's UTC offset ("+02:00"), from the local and UTC timestamps of the activity. */
+  private static utcOffset(messages: FitMessages): string | undefined {
+    const activity = messages.activityMesgs?.[0];
+    const utc = FitParser.toMs(activity?.timestamp);
+    const local = FitParser.toMs(activity?.localTimestamp);
+    if (utc === undefined || local === undefined) return undefined;
+
+    // Real offsets are multiples of 15 minutes; rounding removes clock jitter
+    const minutes = Math.round((local - utc) / 60_000 / 15) * 15;
+    if (Math.abs(minutes) > 14 * 60) return undefined;
+    const sign = minutes < 0 ? '-' : '+';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${sign}${pad(Math.floor(Math.abs(minutes) / 60))}:${pad(Math.abs(minutes) % 60)}`;
   }
 
   /** The decoder returns Dates; raw numbers are seconds since the FIT epoch (1989-12-31). */

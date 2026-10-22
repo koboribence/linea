@@ -1,11 +1,14 @@
 import type { Activity } from '../activity/Activity';
+import { SportClassifier } from '../activity/SportClassifier';
+import { TimeZoneResolver } from '../time/TimeZoneResolver';
 import type { ActivityParser } from './ActivityParser';
 import { ParseError } from './ParseError';
 
 type ParserFactory = () => Promise<ActivityParser>;
 
 /**
- * Entry point for reading activity files: unpacks .gz and picks the parser by extension.
+ * Entry point for reading activity files: unpacks .gz, picks the parser by extension,
+ * then completes the result with the detected sport and local time zone.
  * Parsers are lazy-loaded, so the large FIT SDK is only downloaded when a FIT file arrives.
  */
 export class ActivityLoader {
@@ -18,6 +21,8 @@ export class ActivityLoader {
   };
 
   private readonly parsers = new Map<string, Promise<ActivityParser>>();
+  private readonly classifier = new SportClassifier();
+  private readonly timeZones = new TimeZoneResolver();
 
   async loadFile(file: File): Promise<Activity> {
     return this.load(file.name, await file.arrayBuffer());
@@ -31,12 +36,22 @@ export class ActivityLoader {
     }
 
     const parser = await this.parserFor(name.split('.').pop() ?? '');
+    let activity: Activity;
     try {
-      return parser.parse(data);
+      activity = parser.parse(data);
     } catch (error) {
       if (error instanceof ParseError) throw error;
       throw new ParseError('corrupt', error instanceof Error ? error.message : String(error));
     }
+    return this.complete(activity);
+  }
+
+  /** Fills in what the file may not state: the sport and the local time zone. */
+  private async complete(activity: Activity): Promise<Activity> {
+    return activity.withMeta({
+      sport: this.classifier.classify(activity),
+      timeZone: await this.timeZones.resolve(activity),
+    });
   }
 
   /** Starts downloading parser code early, e.g. when a file is dragged over the page. */

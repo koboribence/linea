@@ -7,12 +7,16 @@ Az 1. fázis eredménye: egy edzésfájlból (`.fit`, `.gpx`, `.tcx`, vagy ezek 
 ```
 File ─► ActivityLoader ─► (gunzip) ─► XxxParser.parse() ─► Activity
                                                               │
-                         StatsCalculator.calculate() ◄────────┘
+                     sportág-felismerés + időzóna (complete) ◄┘
+                                   │
+                         StatsCalculator.calculate()
                                    │
                               ActivityStats ─► StatPresenter + UnitFormatter ─► UI
 ```
 
-A React-réteg ([useActivityFile.ts](../src/ui/useActivityFile.ts)) csak meghívja a fenti láncot, és állapotot tart (`idle | loading | error | ready`). Ha közben új fájl érkezik, a régi eredményt eldobja.
+A React-réteg ([useActivityFile.ts](../src/ui/useActivityFile.ts)) csak meghívja a fenti láncot, és állapotot tart (`idle | loading | error | ready`). Ha közben új fájl érkezik, a régi eredményt eldobja. Az utoljára sikeresen betöltött edzés (`loaded`) a következő fájl betöltése vagy hibája alatt is látható marad.
+
+A statisztikát a szerkesztő számolja ki (lásd [poster-editor.md](poster-editor.md)), mert a sportág ott átállítható, és a számítás egy része sportágfüggő.
 
 ## Fájlok
 
@@ -21,7 +25,9 @@ A React-réteg ([useActivityFile.ts](../src/ui/useActivityFile.ts)) csak meghív
 | [activity/TrackPoint.ts](../src/domain/activity/TrackPoint.ts) | Egy mérési pont. Minden mezője opcionális. |
 | [activity/Activity.ts](../src/domain/activity/Activity.ts) | Metaadat + pontok + készülék-összesítő. Megváltoztathatatlan. |
 | [activity/SportType.ts](../src/domain/activity/SportType.ts) | `run`, `ride` vagy `other`, és a szöveg → sportág leképezés. |
-| [parsing/ActivityLoader.ts](../src/domain/parsing/ActivityLoader.ts) | Belépési pont: kiterjesztés alapján parsert választ, kicsomagolja a `.gz`-t. |
+| [activity/SportClassifier.ts](../src/domain/activity/SportClassifier.ts) | Kitalálja a sportágat, ha a fájl nem mondja meg. |
+| [time/TimeZoneResolver.ts](../src/domain/time/TimeZoneResolver.ts) | Megkeresi, melyik időzónában történt az edzés. |
+| [parsing/ActivityLoader.ts](../src/domain/parsing/ActivityLoader.ts) | Belépési pont: kiterjesztés alapján parsert választ, kicsomagolja a `.gz`-t, kiegészíti a sportágat és az időzónát. |
 | [parsing/ActivityParser.ts](../src/domain/parsing/ActivityParser.ts) | Absztrakt ősosztály, a közös utolsó lépéssel (`createActivity`). |
 | [parsing/XmlActivityParser.ts](../src/domain/parsing/XmlActivityParser.ts) | XML-segédek a GPX és a TCX parsernek. |
 | [parsing/FitParser.ts](../src/domain/parsing/FitParser.ts), [GpxParser.ts](../src/domain/parsing/GpxParser.ts), [TcxParser.ts](../src/domain/parsing/TcxParser.ts) | Formátumonkénti beolvasás. |
@@ -36,9 +42,11 @@ A React-réteg ([useActivityFile.ts](../src/ui/useActivityFile.ts)) csak meghív
 
 **`TrackPoint` mezői:** `time`, `lat`, `lon`, `ele`, `distance` (a készülék kumulatív távja), `speed`, `heartRate`, `cadence`, `power`, `temperature`.
 - A hiányzó mező nincs jelen (`undefined`), nem `0`. A `createActivity` kitörli az `undefined` kulcsokat.
+- A `cadence` **úgy marad, ahogy a fájl tárolja**: futásnál lábanként (stride/perc), bringánál rpm. A lépés/percre váltás csak megjelenítéskor történik (lásd lent), így a sportág utólag is változhat.
 
 **`Activity`:**
-- `meta`: `sport`, `sourceFormat`, `startTime?`, `name?`, `device?`.
+- `meta`: `sport`, `sourceFormat`, `startTime?`, `name?`, `device?`, `timeZone?` (IANA név, pl. `Europe/Budapest`, vagy UTC-eltolás, pl. `+02:00`).
+- `withMeta(changes)`: másolat módosított metaadattal; a pontokon osztozik, nem másolja őket.
 - `points`: a mérési pontok.
 - `deviceSummary`: a készülék saját összesítője.
 - `has*` flagek, amelyeket a konstruktor egyszer kiszámol:
@@ -58,6 +66,9 @@ A React-réteg ([useActivityFile.ts](../src/ui/useActivityFile.ts)) csak meghív
 - **Lusta betöltés:** a parserek dinamikus `import()`-tal töltődnek be. Ennek a FIT SDK-nál van jelentősége (kb. 64 KB gzip), mert csak az első FIT fájlnál töltődik le. A parser példányt utána gyorsítótárazza.
 - **`preload()`:** előre letölti az összes parser kódját. A `DropZone` hívja meg, amikor fájlt húznak fölé, vagy az egér fölé ér.
 - **Hibakezelés:** ha a parser nem `ParseError`-t dob, azt `corrupt` kódú `ParseError`-rá alakítja.
+- **Kiegészítés (`complete`):** a beolvasás után kitölti azt, amit a fájl nem feltétlenül tartalmaz:
+  - **Sportág** (`SportClassifier`): ha a fájl sportága `other`, akkor wattmérő esetén `ride`; egyébként az átlagos mozgási sebesség dönt (legalább 4,5 m/s, azaz kb. 16 km/h → `ride`; legalább 1,9 m/s, azaz kb. 6,8 km/h → `run`; ez alatt `other`). A felhasználó a szerkesztőben felülírhatja.
+  - **Időzóna** (`TimeZoneResolver`): ha van GPS, az első pont koordinátájából a [`@photostructure/tz-lookup`](https://github.com/photostructure/tz-lookup) adja meg a pontos IANA zónát. Ez a könyvtár is csak szükség esetén töltődik be. GPS nélkül a FIT fájl saját UTC-eltolása marad, ha van.
 - **Elfogadott fájlok:** `ActivityLoader.ACCEPT` = `.fit,.gpx,.tcx,.gz`. Ez a fájlválasztó `accept` attribútuma is.
 
 ## Parserek
@@ -65,8 +76,7 @@ A React-réteg ([useActivityFile.ts](../src/ui/useActivityFile.ts)) csak meghív
 Minden parser az `ActivityParser`-ből származik: van egy `format` mezője és egy `parse(data): Activity` metódusa. A végén mindegyik a közös `createActivity(meta, points, summary)` metódust hívja, amely:
 
 1. kitörli az `undefined` mezőket, és eldobja az üres pontokat;
-2. `ParseError('empty')`-t dob, ha nem maradt pont;
-3. **futásnál megduplázza a kadenciát** a pontokon és az összesítőben is. A fájlok lábanként (stride/perc) tárolják, mi lépés/percben (spm) mutatjuk.
+2. `ParseError('empty')`-t dob, ha nem maradt pont.
 
 ### FIT
 
@@ -80,6 +90,7 @@ Minden parser az `ActivityParser`-ből származik: van egy `format` mezője és 
 - **Összesítő:** a `session` üzenetből jön, de csak ha pontosan egy session van. Multisport fájlnál nincs összesítő, ott számolunk.
 - **Nulla érték:** a `totalDistance: 0` és a `totalCalories: 0` „nincs mérve” jelentésű (görgő, futópad), ezért `undefined` lesz belőlük.
 - **Sportág:** `session.sport`, ha nincs, `sport.sport`. A név a `sport.name`-ből, a készülék neve a `fileId`-ből (gyártó + termék) jön.
+- **UTC-eltolás:** az `activity` üzenet `localTimestamp` és `timestamp` mezőjének különbsége, 15 percre kerekítve (pl. `-07:00`). Nem minden készülék írja.
 
 ### GPX
 
@@ -134,10 +145,11 @@ A készülék „timer time” értékét (`totalTimerTime`) nem használjuk moz
   - Táv: 100 km alatt 2 tizedes, fölötte 1.
   - Tempó: `m:ss /km`, 0,3 m/s alatt `–`.
   - Időtartam: `h:mm:ss` vagy `m:ss`.
-  - Kadencia egysége: futásnál `spm`, egyébként `rpm`.
+  - Kadencia: futásnál a tárolt érték **× 2**, egysége `spm` (lépés/perc, két lábra); egyébként a tárolt érték, egysége `rpm`.
+  - Dátum: `date(date, timeZone)` az edzés időzónájában formáz; `UnitFormatter.hour()` a helyi órát adja (ebből lesz az automatikus cím napszaka).
   - Egyelőre csak metrikus mértékegységek vannak.
 - **`StatPresenter`:** a csoportok `overview`, `elevation` és `sensors`. Futásnál tempót mutat (`avgPace`, `bestPace`), egyébként sebességet. A hiányzó értékek és az üres csoportok kimaradnak.
-- **Feliratok:** az i18n kulcsokból jönnek: `stat.<id>`, `group.<id>`, `sport.<sport>`, `error.<code>`. Ezek a [messages/hu.ts](../src/i18n/messages/hu.ts) fájlban vannak; az `en.ts`-nek a típusrendszer miatt ugyanazokat a kulcsokat kell tartalmaznia.
+- **Feliratok:** az i18n kulcsokból jönnek: `stat.<id>`, `sport.<sport>`, `error.<code>`. Ezek a [messages/hu.ts](../src/i18n/messages/hu.ts) fájlban vannak; az `en.ts`-nek a típusrendszer miatt ugyanazokat a kulcsokat kell tartalmaznia.
 
 ## Hibakódok
 
@@ -165,6 +177,7 @@ npm test
 | [parsing.test.ts](../tests/parsing.test.ts) | Formátumonkénti beolvasás valódi mintafájlokon, gzip, hibakódok. |
 | [stats.test.ts](../tests/stats.test.ts) | Számítási szabályok szintetikus adaton. |
 | [format.test.ts](../tests/format.test.ts) | Formázás, megjelenítési logika, i18n. |
+| [enrichment.test.ts](../tests/enrichment.test.ts) | Időzóna és sportág-felismerés. |
 
 - **Futtatási környezet:** Vitest + jsdom, a böngészős `DOMParser` miatt.
 - **A `strava-ride-power.gpx` minta:** a [scripts/make-strava-gpx.mjs](../scripts/make-strava-gpx.mjs) állította elő az Edge810 FIT fájlból. Így a GPX- és a FIT-eredmény egymással is összevethető (a táv kevesebb mint 0,5%-kal térhet el).
@@ -172,7 +185,7 @@ npm test
 
 ## Ismert korlátok
 
-- **Időzóna:** a kezdési idő a böngésző időzónájában jelenik meg, nem az edzés helyén. A FIT `activity.localTimestamp` mezője megoldaná.
+- **Időzóna GPS és FIT-eltolás nélkül** (pl. GPX/TCX futópadról): ilyenkor a böngésző időzónája marad.
 - **Fő szál:** a parsolás a fő szálon fut. Ha nagy fájloknál akadozik, Web Workerbe kell tenni; az `ActivityLoader` interfésze ettől nem változik.
 - **Multisport FIT:** csak az első session sportágát vesszük figyelembe.
 - **Átlagok:** a pulzus és a kadencia átlaga pontonkénti, nem időben súlyozott. Ez az okos rögzítésű (változó mintavételű) fájloknál számít, de FIT/TCX esetén a készülék saját értéke úgyis felülírja.

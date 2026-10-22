@@ -20,9 +20,16 @@ describe('UnitFormatter', () => {
     expect(hu.duration(292).value).toBe('4:52');
   });
 
-  it('labels cadence by sport', () => {
-    expect(hu.cadence(172, 'run').unit).toBe('spm');
-    expect(hu.cadence(90, 'ride').unit).toBe('rpm');
+  it('shows running cadence in steps/min (two legs), cycling cadence as is', () => {
+    expect(hu.cadence(86, 'run')).toEqual({ value: '172', unit: 'spm' });
+    expect(hu.cadence(90, 'ride')).toEqual({ value: '90', unit: 'rpm' });
+  });
+
+  it('shows the date in the activity time zone', () => {
+    const date = new Date('2013-08-16T18:05:10Z');
+    expect(hu.date(date, 'America/St_Johns')).toContain('15:35');
+    expect(hu.date(date, '+02:00')).toContain('20:05');
+    expect(UnitFormatter.hour(date, 'Europe/Budapest')).toBe(20);
   });
 });
 

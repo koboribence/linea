@@ -9,7 +9,7 @@ const calculator = new StatsCalculator();
 const encode = (text: string) => new TextEncoder().encode(text).buffer as ArrayBuffer;
 
 describe('FIT', () => {
-  it('reads a Garmin run with doubled (steps/min) cadence', async () => {
+  it('reads a Garmin run, keeping cadence as stored (strides/min)', async () => {
     const activity = await loadFixture('garmin-fenix-5-run.fit');
     expect(activity.sport).toBe('run');
     expect(activity.meta.device).toContain('fenix5');
@@ -17,7 +17,7 @@ describe('FIT', () => {
 
     const stats = calculator.calculate(activity);
     expect(stats.distance).toBeCloseTo(157.56, 1);
-    expect(stats.avgCadence).toBe(166);
+    expect(stats.avgCadence).toBe(83);
   });
 
   it('reads a ride with power and prefers device totals', async () => {
