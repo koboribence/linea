@@ -65,7 +65,7 @@ Minden stílus domborzati és vektoros adatból készül, ezért bármilyen köz
 
 **Az alapstílus átalakítása:**
 - kikerülnek az utcanevek, egyirányú-nyilak, útszám-pajzsok, vízfeliratok, külvárosi, megyei és országcímkék (zsúfoltak, és külön betűtípus-letöltést igényelnek);
-- a település- és városnevek 1,2-szer nagyobbak az alapnál (zoomfüggő méretgörbénél minden pont mérete szorzódik), a színük a palettából jön, visszafogott szürke: látszanak, de nem hangsúlyosak;
+- **településnevek:** az útvonal által átfogott terület (a befoglaló téglalap hosszabbik oldala) dönti el, mi kap nevet: 5 km-ig falvak, városok és nagyvárosok; 15 km-ig csak városok és nagyvárosok; afölött csak nagyvárosok (`MapStyles.placeLevel`). Messziről a falunevek csak zsúfolnának. A méret rögzített és a kép szélességéhez mért (1080 px-en nagyváros 40, város 34, falu 28 px), félkövér, sötét térképen világos, világoson sötét színnel és ellentétes körvonallal. A nevek minden nagyításnál látszanak (az alapstílus 14–15-ös nagyítás fölött elrejtené őket, de a videó kamerája onnan is egész vidéket lát);
 - a domborzati árnyékolás a vonalak és feliratok alá kerül;
 - **videóban** az utcák középvonala a paletta színét kapja, a lapos épületeket 3D-s (`fill-extrusion`) épületek váltják a valódi magasságukkal (`render_height`), 13-as szinttől.
 
@@ -164,7 +164,8 @@ A videón ugyanaz az elrendezés látszik, mint a képen: cím, adatok, logó, f
 
 - **Útvonal:** a `partialRoute(progress)` a már bejárt részt adja, színezési értékekkel. A végén levő pötty a „fej”.
 - **Felpörgő számok:** a `LiveStats.snapshot` adja őket. **Mindig 0-ról indulnak**, és a végső értéken állnak meg.
-  - **Nem mozdul az elrendezés:** a betűméretet és az elrendezést a végső értékekre méri a rajzoló (`statsSizing`), és a számok egy rögzített jobb szélhez igazodnak, mint egy kilométeróra; a mértékegység helyben marad. Korábban a pörgő szám szélessége képkockánként változtatta a betűméretet, ettől az adatblokk, a magasságprofil és a takarás is mozgott.
+  - **Nem mozdul az elrendezés:** a betűméretet és az elrendezést a végső értékekre méri a rajzoló (`statsSizing`). Korábban a pörgő szám szélessége képkockánként változtatta a betűméretet, ettől az adatblokk, a magasságprofil és a takarás is mozgott.
+  - **Egyforma széles számjegyek:** a legtöbb betűtípusban az „1” keskenyebb, mint a „8” (Barlow-ban 28 kontra 48 egység), így a pörgő szám remegne. A videón minden számjegy egyforma széles cellába kerül, mint egy stopperórán (a vásznon nincs `tabular-nums`, ezért karakterenként rajzoljuk). Így a szám a szokásos módon igazodik a feliratához (balra, illetve középre), és csak akkor mozdul, amikor eggyel több számjegy lesz. Egy korábbi próbálkozás a végső érték szélességéhez jobbra igazított; ettől viszont a videó elején a szám elcsúszott a feliratától. A képeken marad a betűtípus saját betűköze.
   - A táv a látható útvonal megtett hányada szerint nő; az eltelt idő, a mozgásidő és a kalória az időbélyegek szerinti hányadban (időbélyeg nélkül a táv szerint).
   - Az emelkedés és a lejtés a megtett táv arányában nő.
   - Az átlagok (tempó, pulzus, watt) végig állandók, így az elrendezés nem ugrál.

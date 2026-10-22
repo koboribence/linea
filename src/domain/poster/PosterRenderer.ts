@@ -582,11 +582,8 @@ export class PosterRenderer {
       ctx.fillText(label, centered ? x + columnWidth / 2 : x, top);
 
       const baseline = top + layout.labelSize + 14 * u + layout.valueSize * 0.74;
-      // Placed by the final value: a counter grows leftwards from a fixed edge, the unit stays
-      const final = layout.sizing[i] ?? stat;
-      const finalWidth = this.valueWidth(final, layout.valueSize);
-      const valueX = centered ? x + (columnWidth - finalWidth) / 2 : x;
-      this.drawValue(stat, valueX, baseline, layout.valueSize, scene.colors.text, final.value);
+      const valueX = centered ? x + (columnWidth - this.valueWidth(stat, layout.valueSize)) / 2 : x;
+      this.drawValue(stat, valueX, baseline, layout.valueSize, scene.colors.text);
     });
     ctx.globalAlpha = 1;
   }
@@ -632,26 +629,19 @@ export class PosterRenderer {
   // ── Text helpers ──────────────────────────────────────────────────────
 
   /** Big number with a smaller unit after it, sharing the baseline. */
-  /** `finalValue`: the widest the number gets; it is right-aligned within that width. */
   private drawValue(
     stat: PosterStat,
     x: number,
     baseline: number,
     size: number,
     color: string,
-    finalValue = stat.value,
   ): void {
     const { ctx, scene } = this;
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     this.setFont(PosterFonts.css(this.font.value, size));
-    const valueWidth = Math.max(
-      ctx.measureText(finalValue).width,
-      ctx.measureText(stat.value).width,
-    );
-    ctx.textAlign = 'right';
     ctx.fillStyle = color;
-    ctx.fillText(stat.value, x + valueWidth, baseline);
-    ctx.textAlign = 'left';
+    const valueWidth = this.fillNumber(stat.value, x, baseline);
     if (!stat.unit) return;
 
     this.setFont(PosterFonts.css(this.font.value, size * 0.4));
@@ -685,12 +675,56 @@ export class PosterRenderer {
 
   private valueWidth(stat: PosterStat, size: number): number {
     this.setFont(PosterFonts.css(this.font.value, size));
-    let width = this.ctx.measureText(stat.value).width;
+    let width = this.numberWidth(stat.value);
     if (stat.unit) {
       this.setFont(PosterFonts.css(this.font.value, size * 0.4));
       width += size * 0.08 + this.ctx.measureText(stat.unit).width;
     }
     return width;
+  }
+
+  /**
+   * Counters on video use equal-width digits (like a stopwatch): most fonts draw a "1"
+   * narrower than an "8", which would make a ticking number wobble. Images keep the font's
+   * own spacing.
+   */
+  private get tabularDigits(): boolean {
+    return this.scene.statsSizing !== undefined;
+  }
+
+  /** Width of a number in the current font. */
+  private numberWidth(text: string): number {
+    if (!this.tabularDigits) return this.ctx.measureText(text).width;
+    const slot = this.digitSlot();
+    let width = 0;
+    for (const char of text) width += /\d/.test(char) ? slot : this.ctx.measureText(char).width;
+    return width;
+  }
+
+  /** Draws a number in the current font; returns its width. */
+  private fillNumber(text: string, x: number, baseline: number): number {
+    const { ctx } = this;
+    if (!this.tabularDigits) {
+      ctx.fillText(text, x, baseline);
+      return ctx.measureText(text).width;
+    }
+    const slot = this.digitSlot();
+    let at = x;
+    for (const char of text) {
+      const width = ctx.measureText(char).width;
+      const cell = /\d/.test(char) ? slot : width;
+      // Each digit centered in its equal-width cell
+      ctx.fillText(char, at + (cell - width) / 2, baseline);
+      at += cell;
+    }
+    return at - x;
+  }
+
+  /** The widest digit of the current font. */
+  private digitSlot(): number {
+    let widest = 0;
+    for (const digit of '0123456789') widest = Math.max(widest, this.ctx.measureText(digit).width);
+    return widest;
   }
 
   /** Greedy word wrap at the given title size. */

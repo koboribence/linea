@@ -2,3 +2,11 @@ node_modules
 dist
 *.local
 .DS_Store
+
+# Personal activity files dropped in for testing
+/*.fit
+/*.gpx
+/*.tcx
+/*.fit.gz
+/*.gpx.gz
+/*.tcx.gz

@@ -1,5 +1,4 @@
 import type {
-  DataDrivenPropertyValueSpecification,
   LayerSpecification,
   SkySpecification,
   SourceSpecification,
@@ -7,6 +6,7 @@ import type {
 } from 'maplibre-gl';
 import { Color } from '../poster/Color';
 import type { GeoRoute } from '../route/RouteShape';
+import { haversine } from '../stats/geo';
 
 /** Which map: the street map behind images, or the flyover map of videos. */
 export type MapKind = 'streets' | 'flyover';
@@ -42,10 +42,15 @@ export type MapDetail = 'preview' | 'full';
 /** Highest zoom level loaded for previews, per source type */
 const PREVIEW_MAXZOOM = { vector: 13, terrain: TERRAIN_MAXZOOM - 1 };
 
+/** The smallest kind of place still named on the map. */
+export type PlaceLevel = 'village' | 'town' | 'city';
+
 /** What a route's map needs apart from its style. */
 export interface MapLook {
   /** Vertical exaggeration of the 3D terrain */
   exaggeration: number;
+  /** Which places are named: a wide area shows only the bigger ones */
+  places: PlaceLevel;
 }
 
 /** Colors of a map. */
@@ -56,6 +61,8 @@ export interface MapPalette {
   building: string;
   /** Town names */
   label: string;
+  /** Outline around town names, so they stand out on any terrain */
+  labelHalo: string;
   /** Lit slopes of the terrain */
   highlight: string;
   /** Slopes facing away from the light */
@@ -78,7 +85,8 @@ const FLYOVER: Record<MapTone, MapPalette> = {
     land: '#0c0c0c',
     road: '#4b5873',
     building: '#252d3d',
-    label: '#6b7385',
+    label: '#dde3ec',
+    labelHalo: '#07090d',
     highlight: '#7486ab',
     shadow: '#000000',
     shade: '#1b2233',
@@ -89,7 +97,8 @@ const FLYOVER: Record<MapTone, MapPalette> = {
     land: '#f2f3f0',
     road: '#9aa2ad',
     building: '#e1e4e8',
-    label: '#6e747d',
+    label: '#1f2329',
+    labelHalo: '#ffffff',
     highlight: '#ffffff',
     shadow: '#6b7480',
     shade: '#d5dae0',
@@ -104,7 +113,8 @@ const STREETS: Record<MapTone, MapPalette> = {
     land: '#0c0c0c',
     road: '#3c3c3c',
     building: '#0a0a0a',
-    label: '#6b7385',
+    label: '#dde3ec',
+    labelHalo: '#07090d',
     highlight: '#3a4152',
     shadow: '#000000',
     shade: '#141821',
@@ -115,7 +125,8 @@ const STREETS: Record<MapTone, MapPalette> = {
     land: '#f2f3f0',
     road: '#d5d5d5',
     building: '#eaeae5',
-    label: '#6e747d',
+    label: '#1f2329',
+    labelHalo: '#ffffff',
     highlight: '#ffffff',
     shadow: '#9aa1ab',
     shade: '#e4e6e9',
@@ -129,7 +140,8 @@ const TINT: Record<keyof MapPalette, number> = {
   land: 0.05,
   road: 0.5,
   building: 0.2,
-  label: 0.3,
+  label: 0.15,
+  labelHalo: 0,
   highlight: 0.3,
   shadow: 0.1,
   shade: 0.15,
@@ -152,18 +164,26 @@ const DROPPED_LAYERS = [
   /^label_(other|state|country)/,
   /^airport/,
 ];
-/** Town and city names (both styles), a bit larger than the base styles' tiny labels. */
-const PLACE_NAMES = [
-  'place_village',
-  'place_town',
-  'place_city',
-  'place_city_large',
-  'label_village',
-  'label_town',
-  'label_city',
-  'label_city_capital',
-];
-const PLACE_NAME_SCALE = 1.2;
+/** Town and city name layers of both base styles, by the kind of place they name. */
+const PLACE_LAYERS: Record<string, PlaceLevel> = {
+  place_village: 'village',
+  place_town: 'town',
+  place_city: 'city',
+  place_city_large: 'city',
+  label_village: 'village',
+  label_town: 'town',
+  label_city: 'city',
+  label_city_capital: 'city',
+};
+const PLACE_NAMES = Object.keys(PLACE_LAYERS);
+const PLACE_RANK: Record<PlaceLevel, number> = { village: 0, town: 1, city: 2 };
+/**
+ * Name sizes in pixels of the 1080 px wide output, bold, with a dark or light outline:
+ * readable on a phone screen, where the video shows at about a third of that.
+ */
+const PLACE_SIZE: Record<PlaceLevel, number> = { village: 28, town: 34, city: 40 };
+/** Route areas (longer side, meters) up to which villages, then towns are still named. */
+const PLACE_AREA = { village: 5_000, town: 15_000 };
 /** Road centre lines that get the palette color in videos, so streets stay visible. */
 const ROAD_LINES = [
   'highway_path',
@@ -179,7 +199,8 @@ type PaintKey =
   | 'hillshade-shadow-color'
   | 'hillshade-accent-color'
   | 'line-color'
-  | 'text-color';
+  | 'text-color'
+  | 'text-halo-color';
 export type PalettePaint = [layer: string, property: PaintKey, color: string];
 
 const dem = (detail: MapDetail): SourceSpecification => ({
@@ -209,7 +230,7 @@ export class MapStyles {
     return Color.parse(background).isDark ? 'dark' : 'light';
   }
 
-  /** The look of a route's map: relief scaled to its hills. */
+  /** The look of a route's map: relief scaled to its hills, names to its area. */
   static look(route: GeoRoute): MapLook {
     let min = Infinity;
     let max = -Infinity;
@@ -218,12 +239,40 @@ export class MapStyles {
       if (ele < min) min = ele;
       if (ele > max) max = ele;
     }
-    return { exaggeration: MapStyles.exaggeration(min <= max ? max - min : 0) };
+    return {
+      exaggeration: MapStyles.exaggeration(min <= max ? max - min : 0),
+      places: MapStyles.placeLevel(MapStyles.areaSize(route)),
+    };
   }
 
   /** Identifies a look, for caching rendered maps. */
-  static lookKey({ exaggeration }: MapLook): string {
-    return exaggeration.toFixed(1);
+  static lookKey({ exaggeration, places }: MapLook): string {
+    return `${exaggeration.toFixed(1)}|${places}`;
+  }
+
+  /**
+   * Which places get named for an area of this size (meters): seen from far, village names
+   * would only crowd the picture, so a wide area shows towns, a very wide one only cities.
+   */
+  static placeLevel(areaSize: number): PlaceLevel {
+    if (areaSize <= PLACE_AREA.village) return 'village';
+    if (areaSize <= PLACE_AREA.town) return 'town';
+    return 'city';
+  }
+
+  /** The longer side of the route's bounding box, meters. */
+  private static areaSize({ coordinates }: GeoRoute): number {
+    if (coordinates.length === 0) return 0;
+    let [minLon, minLat] = coordinates[0]!;
+    let [maxLon, maxLat] = coordinates[0]!;
+    for (const [lon, lat] of coordinates) {
+      minLon = Math.min(minLon, lon);
+      maxLon = Math.max(maxLon, lon);
+      minLat = Math.min(minLat, lat);
+      maxLat = Math.max(maxLat, lat);
+    }
+    const midLat = (minLat + maxLat) / 2;
+    return Math.max(haversine(midLat, minLon, midLat, maxLon), haversine(minLat, 0, maxLat, 0));
   }
 
   /**
@@ -290,6 +339,7 @@ export class MapStyles {
       ['shading', 'hillshade-accent-color', palette.shade],
       ...ROAD_LINES.map((id): PalettePaint => [id, 'line-color', palette.road]),
       ...PLACE_NAMES.map((id): PalettePaint => [id, 'text-color', palette.label]),
+      ...PLACE_NAMES.map((id): PalettePaint => [id, 'text-halo-color', palette.labelHalo]),
     ];
   }
 
@@ -314,7 +364,8 @@ export class MapStyles {
   ): StyleSpecification {
     let layers = base.layers
       .filter((layer) => !DROPPED_LAYERS.some((pattern) => pattern.test(layer.id)))
-      .map(MapStyles.enlargePlaceName);
+      .filter((layer) => MapStyles.namesPlace(layer.id, look.places))
+      .map(MapStyles.stylePlaceName);
     if (kind === 'flyover') layers = layers.map(MapStyles.extrudeBuildings);
     // Terrain shading goes under roads and labels, right above land and water fills
     const firstLine = layers.findIndex((layer) => layer.type === 'line' || layer.type === 'symbol');
@@ -354,32 +405,31 @@ export class MapStyles {
     return Object.fromEntries(limited) as StyleSpecification['sources'];
   }
 
-  /**
-   * Town names a bit larger, and at every zoom: the base styles hide them from zoom 14–15 on,
-   * but the video camera sees a whole area from that close.
-   */
-  private static enlargePlaceName(layer: LayerSpecification): LayerSpecification {
-    if (layer.type !== 'symbol' || !PLACE_NAMES.includes(layer.id)) return layer;
-    const shown = { ...layer };
-    delete shown.maxzoom;
-    const size = MapStyles.scaleSize(layer.layout?.['text-size'], PLACE_NAME_SCALE);
-    return size === undefined
-      ? shown
-      : { ...shown, layout: { ...layer.layout, 'text-size': size } };
+  /** False for name layers of places smaller than the level (e.g. villages on a wide area). */
+  private static namesPlace(id: string, level: PlaceLevel): boolean {
+    const kind = PLACE_LAYERS[id];
+    return kind === undefined || PLACE_RANK[kind] >= PLACE_RANK[level];
   }
 
-  /** A number, or a zoom curve whose output sizes are all scaled. */
-  private static scaleSize(
-    size: DataDrivenPropertyValueSpecification<number> | undefined,
-    scale: number,
-  ): DataDrivenPropertyValueSpecification<number> | undefined {
-    if (typeof size === 'number') return size * scale;
-    if (!Array.isArray(size) || size[0] !== 'interpolate') return undefined;
-    // ["interpolate", curve, ["zoom"], zoom1, size1, zoom2, size2, …]
-    const scaled = (size as unknown[]).map((value, i) =>
-      i >= 4 && i % 2 === 0 && typeof value === 'number' ? value * scale : value,
-    );
-    return scaled as DataDrivenPropertyValueSpecification<number>;
+  /**
+   * Town names readable on a poster: a fixed size by kind of place, bold, with an outline,
+   * and at every zoom (the base styles hide them from zoom 14–15 on, but the video camera
+   * sees a whole area from that close).
+   */
+  private static stylePlaceName(layer: LayerSpecification): LayerSpecification {
+    const kind = PLACE_LAYERS[layer.id];
+    if (layer.type !== 'symbol' || kind === undefined) return layer;
+    const named = { ...layer };
+    delete named.maxzoom;
+    return {
+      ...named,
+      layout: {
+        ...layer.layout,
+        'text-size': PLACE_SIZE[kind],
+        'text-font': ['Noto Sans Bold'],
+      },
+      paint: { ...layer.paint, 'text-halo-width': 2.5, 'text-halo-blur': 0.5 },
+    };
   }
 
   /** Flat building outlines become 3D blocks with their real height. */

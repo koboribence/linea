@@ -157,25 +157,38 @@ describe('MapStyles', () => {
     expect(road?.type === 'line' && road.paint?.['line-color']).toBe('#181818');
   });
 
-  it('enlarges town names, also on zoom curves', () => {
-    const curve: LayerSpecification = {
-      id: 'label_city',
+  it('names only the bigger places on a wide area, in readable bold type', () => {
+    const symbol = (id: string): LayerSpecification => ({
+      id,
       type: 'symbol',
       source: 'x',
+      maxzoom: 14,
       layout: { 'text-size': ['interpolate', ['linear'], ['zoom'], 8, 10, 14, 20] },
-    };
-    const style = MapStyles.build(
-      'streets',
-      { ...base, layers: [...base.layers, curve] },
-      look,
-      streets,
-    );
-    const size = (id: string) => {
-      const layer = style.layers.find((l) => l.id === id);
-      return layer?.type === 'symbol' ? layer.layout?.['text-size'] : undefined;
-    };
-    expect(size('place_city')).toBeCloseTo(12);
-    expect(size('label_city')).toEqual(['interpolate', ['linear'], ['zoom'], 8, 12, 14, 24]);
+    });
+    const places = { ...base, layers: ['label_village', 'label_town', 'label_city'].map(symbol) };
+    const named = (level: 'village' | 'town' | 'city') =>
+      MapStyles.build('streets', places, { ...look, places: level }, streets).layers.filter(
+        (l) => l.type === 'symbol',
+      );
+    expect(named('village').map((l) => l.id)).toEqual([
+      'label_village',
+      'label_town',
+      'label_city',
+    ]);
+    expect(named('town').map((l) => l.id)).toEqual(['label_town', 'label_city']);
+    expect(named('city').map((l) => l.id)).toEqual(['label_city']);
+
+    const city = named('city')[0]!;
+    expect(city.maxzoom).toBeUndefined();
+    expect(city.type === 'symbol' && city.layout?.['text-size']).toBe(40);
+    expect(city.type === 'symbol' && city.layout?.['text-font']).toEqual(['Noto Sans Bold']);
+    expect(city.type === 'symbol' && city.paint?.['text-halo-color']).toBe(streets.labelHalo);
+
+    expect(MapStyles.placeLevel(4_000)).toBe('village');
+    expect(MapStyles.placeLevel(12_000)).toBe('town');
+    expect(MapStyles.placeLevel(33_000)).toBe('city');
+    // This fixture covers about 7 km
+    expect(look.places).toBe('town');
   });
 
   it('gives videos streets and 3D buildings in the palette colors', () => {
