@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
 import type { Activity } from '../../domain/activity/Activity';
 import { useLocale } from '../../i18n/LocaleContext';
+import { useBusy } from '../BusyContext';
 import { Segmented } from '../controls/Segmented';
 import { MapView } from '../map/MapView';
 import { FlyoverPreview } from '../video/FlyoverPreview';
@@ -17,6 +18,8 @@ export function EditorScreen({ activity: loaded }: { activity: Activity }) {
   const editor = usePosterEditor(loaded, mode);
   const { activity, design, route } = editor;
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Nothing may change while a video is being made
+  const busy = useBusy();
   const [canShare] = useState(() => PosterExporter.canShare());
 
   const fileName = PosterExporter.fileName(activity);
@@ -47,7 +50,7 @@ export function EditorScreen({ activity: loaded }: { activity: Activity }) {
       <div className="editor__preview">
         {/* The flyover video needs a route to fly along */}
         {route && (
-          <div className="mode-switch" onPointerEnter={prepareVideo}>
+          <div className="mode-switch lockable" inert={busy} onPointerEnter={prepareVideo}>
             <Segmented
               label={i18n.t('mode.label')}
               options={[
@@ -106,7 +109,7 @@ export function EditorScreen({ activity: loaded }: { activity: Activity }) {
         )}
       </div>
 
-      <div className="editor__side">
+      <div className="editor__side lockable" inert={busy}>
         <p className="editor__info">{info.join(' · ')}</p>
         <EditorPanel
           design={design}

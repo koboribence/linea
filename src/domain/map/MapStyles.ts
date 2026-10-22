@@ -354,11 +354,18 @@ export class MapStyles {
     return Object.fromEntries(limited) as StyleSpecification['sources'];
   }
 
+  /**
+   * Town names a bit larger, and at every zoom: the base styles hide them from zoom 14–15 on,
+   * but the video camera sees a whole area from that close.
+   */
   private static enlargePlaceName(layer: LayerSpecification): LayerSpecification {
     if (layer.type !== 'symbol' || !PLACE_NAMES.includes(layer.id)) return layer;
+    const shown = { ...layer };
+    delete shown.maxzoom;
     const size = MapStyles.scaleSize(layer.layout?.['text-size'], PLACE_NAME_SCALE);
-    if (size === undefined) return layer;
-    return { ...layer, layout: { ...layer.layout, 'text-size': size } };
+    return size === undefined
+      ? shown
+      : { ...shown, layout: { ...layer.layout, 'text-size': size } };
   }
 
   /** A number, or a zoom curve whose output sizes are all scaled. */

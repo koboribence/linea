@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { POSTER_FORMATS } from '../../domain/poster/PosterFormat';
 import { useLocale } from '../../i18n/LocaleContext';
+import { useLockWhile } from '../BusyContext';
 import { PosterExporter } from '../editor/PosterExporter';
 import { useFlyover, type FlyoverInput, type PreviewState } from './useFlyover';
 
@@ -22,6 +23,8 @@ export function VideoStudio({ input }: { input: FlyoverInput }) {
 
   const { exportState, preview } = video;
   const rendering = exportState.status === 'rendering';
+  // Nothing else may change while the video is being made
+  useLockWhile(rendering);
   const fileName =
     exportState.status === 'done'
       ? PosterExporter.fileName(input.activity, exportState.file.extension)
@@ -58,6 +61,13 @@ export function VideoStudio({ input }: { input: FlyoverInput }) {
           <canvas ref={overlay} className="video-stage__layer" hidden={rendering} />
         </div>
         <FrameStatus preview={preview} rendering={rendering} />
+        {exportState.status === 'rendering' && (
+          <RenderOverlay
+            share={exportState.share}
+            remaining={exportState.remaining}
+            onCancel={video.cancelExport}
+          />
+        )}
       </div>
 
       <div className="video-controls">
@@ -98,20 +108,6 @@ export function VideoStudio({ input }: { input: FlyoverInput }) {
           </button>
         )}
 
-        {exportState.status === 'rendering' && (
-          <div className="render-progress" role="status">
-            <div className="render-progress__bar">
-              <span style={{ width: `${Math.round(exportState.share * 100)}%` }} />
-            </div>
-            <span>
-              {i18n.t('video.rendering', { percent: Math.round(exportState.share * 100) })}
-            </span>
-            <button type="button" className="link-button" onClick={video.cancelExport}>
-              {i18n.t('video.cancel')}
-            </button>
-          </div>
-        )}
-
         {exportState.status === 'done' && (
           <div className="render-done">
             <span className="render-done__info">
@@ -145,8 +141,39 @@ export function VideoStudio({ input }: { input: FlyoverInput }) {
           </p>
         )}
       </div>
-      {exportState.status === 'rendering' && <p className="field__hint">{i18n.t('video.hint')}</p>}
     </>
+  );
+}
+
+/** While the video is made: big progress over the frames being made, time left, cancel. */
+function RenderOverlay(props: { share: number; remaining?: number; onCancel: () => void }) {
+  const { i18n } = useLocale();
+  const percent = Math.round(props.share * 100);
+  const left = props.remaining;
+  const time =
+    left === undefined
+      ? i18n.t('video.estimating')
+      : left < 60
+        ? i18n.t('video.secondsLeft', { count: Math.max(1, Math.round(left)) })
+        : i18n.t('video.minutesLeft', {
+            minutes: Math.floor(left / 60),
+            seconds: Math.round(left % 60),
+          });
+  return (
+    <div className="render-overlay" role="status" aria-live="polite">
+      <div className="render-overlay__head">
+        <strong>{i18n.t('video.renderingTitle')}</strong>
+        <span className="render-overlay__percent">{percent}%</span>
+      </div>
+      <div className="render-overlay__bar">
+        <span style={{ width: `${percent}%` }} />
+      </div>
+      <span className="render-overlay__time">{time}</span>
+      <span className="render-overlay__hint">{i18n.t('video.hint')}</span>
+      <button type="button" className="button button--secondary" onClick={props.onCancel}>
+        {i18n.t('video.cancel')}
+      </button>
+    </div>
   );
 }
 

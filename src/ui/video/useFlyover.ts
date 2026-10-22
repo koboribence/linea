@@ -54,7 +54,8 @@ const MIN_PIXEL_RATIO = 0.5;
 
 export type ExportState =
   | { status: 'idle' }
-  | { status: 'rendering'; share: number }
+  /** `remaining`: estimated seconds left, once there is enough progress to tell */
+  | { status: 'rendering'; share: number; remaining?: number }
   | { status: 'done'; file: VideoFile }
   | { status: 'failed' };
 
@@ -115,6 +116,13 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
       ? { status: 'preparing', share: preview.share }
       : { status: preview.status };
 
+  // The stats at their final values: the layout is measured on them, so counters never move it
+  const finalStats = useMemo(() => {
+    const statItems = presenter.groups(activity, stats).flatMap((g) => g.items);
+    return builder.build({ activity, design, statItems, route, elevation, brandName: BRAND.name })
+      .stats;
+  }, [presenter, activity, stats, builder, design, route, elevation]);
+
   // Route, text and stats over a map at moment t: same layout as the image,
   // with the route drawing itself and counters ticking up
   const sceneAt = useCallback(
@@ -140,9 +148,10 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
         ...scene,
         statsOpacity: Math.min(1, t / FlyoverPath.INTRO_END),
         elevationMarker: shot.progress,
+        statsSizing: finalStats,
       };
     },
-    [path, live, stats, presenter, activity, builder, design, route, elevation],
+    [path, live, stats, presenter, activity, builder, design, route, elevation, finalStats],
   );
 
   // Text needs its fonts before the first frame; fallback letters would flash otherwise
@@ -254,6 +263,7 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
     setPlaying(false);
     abort.current = new AbortController();
     setExportState({ status: 'rendering', share: 0 });
+    const started = performance.now();
     // The preview map goes away meanwhile: phones may not have memory for two maps
     FlyoverPreview.release();
     let map: MapView | undefined;
@@ -279,7 +289,11 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
         moveTo: (t) => exportMap.setCamera(path.shotAt(t)),
         overlayAt: (t) => sceneAt(exportMap, t),
         signal: abort.current.signal,
-        onProgress: (share) => setExportState({ status: 'rendering', share }),
+        onProgress: (share) => {
+          const elapsed = (performance.now() - started) / 1000;
+          const remaining = share > 0.03 ? (elapsed * (1 - share)) / share : undefined;
+          setExportState({ status: 'rendering', share, remaining });
+        },
         onFrame: (frame) => {
           const canvas = refs.backdrop.current;
           if (frames++ % SHOW_EVERY_FRAME !== 0 || !canvas) return;

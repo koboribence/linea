@@ -315,5 +315,5 @@ A felület a `PosterTheme.IDS` alapján magától megjeleníti.
 - **Nincs térkép:** az útvonal térképalap nélkül jelenik meg (6. szakasz).
 - **Háttérkép és új fájl:** a háttérkép nem marad meg új fájl betöltésekor; minden edzéshez újra kell választani.
 - **Mértékegység:** csak metrikus.
-- **Link fejlesztés közben:** a megosztólink az oldal saját címére mutat. Fejlesztés közben ez `localhost`, ami telefonról nem érhető el. Ilyenkor a `npx vite --host` paranccsal a gép helyi hálózati címén indítsd a szervert, és onnan nyisd meg az oldalt.
+- **Link fejlesztés közben:** a megosztólink az oldal saját címére mutat. Fejlesztés közben ez `localhost`, ami telefonról nem érhető el. Ilyenkor az `npm run dev:lan` paranccsal indítsd a szervert: a gép helyi hálózati címén, HTTPS-sel (saját aláírású tanúsítvánnyal, `@vitejs/plugin-basic-ssl`) érhető el. HTTPS nélkül a telefon nem engedné a videókódolást, a megosztást és a service workert; a tanúsítvány-figyelmeztetést egyszer el kell fogadni.
 - **Mentett színek:** csak a szín-pár menthető; a teljes sablon (formátum, adatok, elrendezés) megosztása még nincs kész.

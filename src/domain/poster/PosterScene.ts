@@ -56,6 +56,11 @@ export interface PosterScene {
   };
   /** Stats block opacity, for fading it in on video (default 1) */
   statsOpacity?: number;
+  /**
+   * The same stats at their final values (video): the layout is measured on these, so
+   * counters ticking up never resize or move the block; numbers grow from a fixed right edge.
+   */
+  statsSizing?: PosterStat[];
   /** Position marker on the elevation profile, 0…1 (video) */
   elevationMarker?: number;
 }

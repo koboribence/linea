@@ -1,5 +1,5 @@
 import type { GeoRoute } from '../route/RouteShape';
-import { bearing, haversine } from '../stats/geo';
+import { haversine } from '../stats/geo';
 
 /** Where the camera is at one moment of the flyover. Map-library independent. */
 export interface CameraShot {
@@ -20,24 +20,26 @@ export interface CameraShot {
 /** Vertical field of view of the map camera (MapLibre's default), degrees. */
 const FOV = 36.87;
 const RAD = Math.PI / 180;
-/** Points of the precomputed heading track along the route. */
-const HEADING_STEPS = 800;
-/** Stretch (share of the route, each side) giving the local direction of travel. */
-const LOCAL_DIRECTION = 0.01;
-/** How quickly the camera follows a change of direction, per track step (0…1). */
-const HEADING_EASE = 0.06;
-/** Turning speed cap per track step, degrees (a U-turn takes ≈3 s of video). */
-const MAX_TURN_STEP = 0.8;
+/** Points of the precomputed ground track along the route. */
+const TRACK_STEPS = 800;
+/**
+ * The follow camera doesn't turn with the route: seen from this far, the whole map would
+ * swing with it (a loop route means a full turn). It drifts slowly around north instead,
+ * this many degrees in all, like the north-up still image.
+ */
+const FOLLOW_DRIFT = 40;
 const FOLLOW_PITCH = 62;
 const OVERVIEW_PITCH = 38;
 const END_PITCH = 50;
+/** The camera's ground height is averaged over at most this share of the route, each side. */
+const GROUND_WINDOW_MAX = 0.15;
 /** Moments checked when picking warm-up shots. */
 const WARM_UP_STEPS = 600;
 /**
  * How much the view may change before the next warm-up shot: moved by this share of the camera
  * distance, zoomed by this many zoom levels, turned or tilted by this many degrees.
  */
-const WARM_UP_CHANGE = { moved: 0.18, zoomed: 0.22, turned: 15, tilted: 6 };
+const WARM_UP_CHANGE = { moved: 0.12, zoomed: 0.18, turned: 12, tilted: 5 };
 /** The chase camera is this much closer than the still image's view of the whole route. */
 const FOLLOW_ZOOM = 1.18;
 /** Opening and ending shots are at least this much further away than the chase camera. */
@@ -48,8 +50,9 @@ const END_ORBIT = 70;
 const HOLD_ORBIT = 12;
 
 /**
- * Camera choreography for a route flyover:
- * intro (overview → start), follow (chase cam along the route), outro (pull back and orbit).
+ * Camera choreography for a route flyover: intro (overview → start), follow (the camera
+ * glides along with the route's head, drifting slowly around north), outro (pull back and
+ * orbit), and a hold on the finished route.
  * shotAt(t) gives the camera for any moment t ∈ [0, 1], so frames can be rendered in any order.
  */
 export class FlyoverPath {
@@ -67,8 +70,10 @@ export class FlyoverPath {
   private readonly extentHeight: number;
   private readonly overviewDistance: number;
   private readonly chaseDistance: number;
-  /** Smoothed camera heading, unwrapped degrees, HEADING_STEPS + 1 values */
-  private readonly headings: number[];
+  /** Smoothed ground height under the camera's target, TRACK_STEPS + 1 values */
+  private readonly ground: number[];
+  /** Average ground height, for shots of the whole route */
+  private readonly meanGround: number;
 
   /**
    * aspect = output width / height (portrait videos need the camera further away);
@@ -97,7 +102,8 @@ export class FlyoverPath {
       this.fitDistance(OVERVIEW_PITCH, 0, share) * 1.2,
       this.chaseDistance * PULL_BACK,
     );
-    this.headings = this.computeHeadings();
+    this.ground = this.computeGround();
+    this.meanGround = this.ground.reduce((sum, h) => sum + h, 0) / this.ground.length;
   }
 
   get length(): number {
@@ -228,51 +234,48 @@ export class FlyoverPath {
     return a + (b - a) * fraction;
   }
 
-  /** Camera direction at `progress`, read from the precomputed smooth heading track. */
-  private headingAt(progress: number): number {
-    const position = Math.max(0, Math.min(1, progress)) * HEADING_STEPS;
-    const i = Math.min(Math.floor(position), HEADING_STEPS - 1);
-    const fraction = position - i;
-    const heading = this.headings[i]! + (this.headings[i + 1]! - this.headings[i]!) * fraction;
-    return ((heading % 360) + 360) % 360;
+  /** Height the camera aims at, from the precomputed smooth ground track. */
+  private groundAt(progress: number): number {
+    const position = Math.max(0, Math.min(1, progress)) * TRACK_STEPS;
+    const i = Math.min(Math.floor(position), TRACK_STEPS - 1);
+    return this.ground[i]! + (this.ground[i + 1]! - this.ground[i]!) * (position - i);
+  }
+
+  /** Compass direction of the follow camera: a slow, even drift across north. */
+  private followBearing(progress: number): number {
+    return (FOLLOW_DRIFT * (progress - 0.5) + 360) % 360;
   }
 
   /**
-   * The camera's heading along the whole route, computed once: the local direction of travel,
-   * smoothed forwards and backwards with a cap on the turning speed. Hairpins and out-and-back
-   * turns become a calm sweep instead of a snap, and every frame just reads from the track.
+   * Recorded elevation is noisy (several meters from one point to the next), and terrain
+   * exaggeration multiplies it: followed directly, it makes the whole view bob up and down.
+   * Averaged over about the stretch the camera sees, big hills still lift it, noise doesn't.
    */
-  private computeHeadings(): number[] {
-    const raw: number[] = [];
-    for (let i = 0; i <= HEADING_STEPS; i++) {
-      const p = i / HEADING_STEPS;
-      const a = this.pointAt(Math.max(0, p - LOCAL_DIRECTION));
-      const b = this.pointAt(Math.min(1, p + LOCAL_DIRECTION));
-      const direction = bearing(a[1], a[0], b[1], b[0]);
-      // Unwrapped, so 359° → 1° is a 2° step and not a 358° one
-      const previous = raw[i - 1];
-      raw.push(previous === undefined ? direction : previous + wrap(direction - previous));
+  private computeGround(): number[] {
+    let values = Array.from({ length: TRACK_STEPS + 1 }, (_, i) =>
+      this.elevationAt(i / TRACK_STEPS),
+    );
+    const share = this.total > 0 ? Math.min(GROUND_WINDOW_MAX, this.chaseDistance / this.total) : 0;
+    const radius = Math.max(1, Math.round(share * TRACK_STEPS));
+    // Three box blurs in a row: close to a bell-shaped (Gaussian) average
+    for (let pass = 0; pass < 3; pass++) {
+      values = values.map((_, i) => {
+        const from = Math.max(0, i - radius);
+        const to = Math.min(values.length - 1, i + radius);
+        let sum = 0;
+        for (let j = from; j <= to; j++) sum += values[j]!;
+        return sum / (to - from + 1);
+      });
     }
-    const smooth = (values: number[]) => {
-      const out = [values[0]!];
-      for (let i = 1; i < values.length; i++) {
-        const step = (values[i]! - out[i - 1]!) * HEADING_EASE;
-        out.push(out[i - 1]! + Math.max(-MAX_TURN_STEP, Math.min(MAX_TURN_STEP, step)));
-      }
-      return out;
-    };
-    // Forward and backward passes averaged: smooth without lagging behind the route
-    const forward = smooth(raw);
-    const backward = smooth([...raw].reverse()).reverse();
-    return forward.map((f, i) => (f + backward[i]!) / 2);
+    return values;
   }
 
   private followShot(progress: number): CameraShot {
     return {
       target: this.pointAt(progress),
-      targetElevation: this.elevationAt(progress),
+      targetElevation: this.groundAt(progress),
       distance: this.chaseDistance,
-      bearing: this.headingAt(progress),
+      bearing: this.followBearing(progress),
       pitch: FOLLOW_PITCH,
       progress,
     };
@@ -281,9 +284,9 @@ export class FlyoverPath {
   private overviewShot(): CameraShot {
     return {
       target: this.center,
-      targetElevation: this.elevationAt(0.5),
+      targetElevation: this.meanGround,
       distance: this.overviewDistance,
-      bearing: this.headingAt(0) - 25,
+      bearing: (this.followBearing(0) - 25 + 360) % 360,
       pitch: OVERVIEW_PITCH,
       progress: 0,
     };
@@ -291,10 +294,10 @@ export class FlyoverPath {
 
   /** The whole route in view, `drift` degrees further around than the end of the orbit. */
   private endShot(drift: number): CameraShot {
-    const bearing = this.headingAt(1) + END_ORBIT + drift;
+    const bearing = this.followBearing(1) + END_ORBIT + drift;
     return {
       target: this.center,
-      targetElevation: this.elevationAt(0.5),
+      targetElevation: this.meanGround,
       distance: Math.max(
         this.fitDistance(END_PITCH, bearing, this.share) * 1.2,
         this.chaseDistance * PULL_BACK,
@@ -331,9 +334,4 @@ function ease(x: number): number {
 function easeSine(x: number): number {
   const t = Math.max(0, Math.min(1, x));
   return -(Math.cos(Math.PI * t) - 1) / 2;
-}
-
-/** Signed difference of two angles, in -180…180. */
-function wrap(degrees: number): number {
-  return ((((degrees + 180) % 360) + 360) % 360) - 180;
 }

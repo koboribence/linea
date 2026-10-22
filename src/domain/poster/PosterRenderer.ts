@@ -25,6 +25,8 @@ interface TitleLayout {
 
 interface StatsLayout {
   stats: PosterStat[];
+  /** What the sizes were measured on: the stats themselves, or their final values (video) */
+  sizing: PosterStat[];
   columns: number;
   columnWidth: number;
   labelSize: number;
@@ -134,7 +136,9 @@ export class PosterRenderer {
     let stats: StatsLayout | undefined;
     for (let scale = 1; scale >= 0.5; scale -= 0.1) {
       stats =
-        gridStats.length > 0 ? this.layoutStats(gridStats, bottom, isStory, scale) : undefined;
+        gridStats.length > 0
+          ? this.layoutStats(gridStats, bottom, isStory, scale, this.sizingFor(gridStats))
+          : undefined;
       if (!stats || stats.top - 40 * u - 56 * u - middleTop >= minMiddle) break;
     }
     const divider = stats ? stats.top - 40 * u : undefined;
@@ -190,11 +194,18 @@ export class PosterRenderer {
     return 3;
   }
 
+  /** Final values to measure on, when the scene has matching ones (video counters). */
+  private sizingFor(stats: PosterStat[]): PosterStat[] {
+    const sizing = this.scene.statsSizing;
+    return sizing?.length === stats.length ? sizing : stats;
+  }
+
   private layoutStats(
     stats: PosterStat[],
     bottom: number,
     isStory: boolean,
     scale: number,
+    sizing: PosterStat[],
   ): StatsLayout {
     const { u, pad, scene } = this;
     const columns = PosterRenderer.columnsFor(stats.length, isStory);
@@ -203,12 +214,12 @@ export class PosterRenderer {
 
     // Shrink labels and numbers until the widest one fits its column
     let labelSize = Math.max(17, 24 * scale) * u;
-    for (const stat of stats) {
+    for (const stat of sizing) {
       const width = this.labelWidth(stat.label, labelSize);
       if (width > columnWidth) labelSize = Math.max(16 * u, (labelSize * columnWidth) / width);
     }
     let valueSize = (columns <= 2 ? 120 : columns === 3 ? 100 : 88) * u * scale;
-    for (const stat of stats) {
+    for (const stat of sizing) {
       const width = this.valueWidth(stat, valueSize);
       if (width > columnWidth) valueSize *= columnWidth / width;
     }
@@ -218,6 +229,7 @@ export class PosterRenderer {
     const top = bottom - rows * rowHeight - (rows - 1) * rowGap;
     return {
       stats,
+      sizing,
       columns,
       columnWidth,
       labelSize,
@@ -570,8 +582,11 @@ export class PosterRenderer {
       ctx.fillText(label, centered ? x + columnWidth / 2 : x, top);
 
       const baseline = top + layout.labelSize + 14 * u + layout.valueSize * 0.74;
-      const valueX = centered ? x + (columnWidth - this.valueWidth(stat, layout.valueSize)) / 2 : x;
-      this.drawValue(stat, valueX, baseline, layout.valueSize, scene.colors.text);
+      // Placed by the final value: a counter grows leftwards from a fixed edge, the unit stays
+      const final = layout.sizing[i] ?? stat;
+      const finalWidth = this.valueWidth(final, layout.valueSize);
+      const valueX = centered ? x + (columnWidth - finalWidth) / 2 : x;
+      this.drawValue(stat, valueX, baseline, layout.valueSize, scene.colors.text, final.value);
     });
     ctx.globalAlpha = 1;
   }
@@ -617,22 +632,28 @@ export class PosterRenderer {
   // ── Text helpers ──────────────────────────────────────────────────────
 
   /** Big number with a smaller unit after it, sharing the baseline. */
+  /** `finalValue`: the widest the number gets; it is right-aligned within that width. */
   private drawValue(
     stat: PosterStat,
     x: number,
     baseline: number,
     size: number,
     color: string,
+    finalValue = stat.value,
   ): void {
     const { ctx, scene } = this;
-    ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     this.setFont(PosterFonts.css(this.font.value, size));
+    const valueWidth = Math.max(
+      ctx.measureText(finalValue).width,
+      ctx.measureText(stat.value).width,
+    );
+    ctx.textAlign = 'right';
     ctx.fillStyle = color;
-    ctx.fillText(stat.value, x, baseline);
+    ctx.fillText(stat.value, x + valueWidth, baseline);
+    ctx.textAlign = 'left';
     if (!stat.unit) return;
 
-    const valueWidth = ctx.measureText(stat.value).width;
     this.setFont(PosterFonts.css(this.font.value, size * 0.4));
     ctx.fillStyle = scene.colors.muted;
     ctx.fillText(stat.unit, x + valueWidth + size * 0.08, baseline);

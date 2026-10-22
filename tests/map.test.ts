@@ -46,6 +46,21 @@ describe('FlyoverPath', () => {
     }
   });
 
+  it('keeps the view calm while following: no swinging, no bobbing', () => {
+    let maxTurn = 0;
+    let maxRise = 0;
+    for (let i = 1; i <= 600; i++) {
+      const a = path.shotAt((i - 1) / 600);
+      const b = path.shotAt(i / 600);
+      if (i / 600 <= FlyoverPath.INTRO_END || i / 600 >= FlyoverPath.OUTRO_START) continue;
+      maxTurn = Math.max(maxTurn, Math.abs(((b.bearing - a.bearing + 540) % 360) - 180));
+      maxRise = Math.max(maxRise, Math.abs(b.targetElevation - a.targetElevation));
+    }
+    // A 20 s video at 30 fps: under 6°/s of turning, under 1 m of height change per frame
+    expect(maxTurn).toBeLessThan(0.2);
+    expect(maxRise).toBeLessThan(1);
+  });
+
   it('ends by showing the finished route for a while', () => {
     const hold = [FlyoverPath.HOLD_START, 0.95, 1].map((t) => path.shotAt(t));
     for (const shot of hold) {

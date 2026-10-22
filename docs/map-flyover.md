@@ -135,7 +135,7 @@ A kamera helye bármely `t ∈ [0, 1]` időpontra **állapot nélkül** kiszámo
 | Szakasz | `t` | Kamera |
 |---|---|---|
 | Nyitás | 0–0,12 | A teljes útvonal felülről (38° dőlés), majd ereszkedés a rajthoz |
-| Követés | 0,12–0,74 | Az útvonal mögött és fölött (62° dőlés), a kirajzolt nyomvonal „fejét” követve |
+| Követés | 0,12–0,74 | Messziről, 62°-os dőléssel, a kirajzolt nyomvonal „fejét” követve; a kép lassan úszik észak körül |
 | Zárás | 0,74–0,9 | Kihátrálás, és közben 70°-os körbefordulás, a teljes útvonallal a sávban |
 | Kész kör | 0,9–1 | A teljes útvonal látszik, a kamera lassan (12°-ot) tovább kering; 20 mp-es videónál 2 mp |
 
@@ -144,14 +144,13 @@ A kamera helye bármely `t ∈ [0, 1]` időpontra **állapot nélkül** kiszámo
 - az irány a rövidebb úton fordul;
 - követés közben az előrehaladás szinuszos görbét követ (lágy indulás és megállás).
 
-**Kamera-irány:** egy előre kiszámolt, 800 pontos irány-sávból jön (`computeHeadings`):
-1. **Helyi haladási irány** minden pontban (az útvonal ±1%-án).
-2. **Simítás előre és hátra**, majd a két menet átlaga, így a kamera nem késik a kanyarok után.
-3. **Fordulási sebesség korlátja:** egy hajtűkanyar vagy egy oda-vissza útvonal fordulója kb. 3 mp alatt zajlik le.
+**Kamera-irány:** követés közben a kamera **nem fordul az útvonallal**, hanem a videó alatt lassan, egyenletesen úszik észak körül (összesen 40°, -20°-tól +20°-ig), és közben görgetve követi a nyomvonal „fejét”. A nyitás innen 25°-kal elforgatva indul, a zárás 70°-ot kering, a kész körnél még 12°-ot.
 
-Mérve: legfeljebb 4,8° fordulás képkockánként (30 fps, 10 mp). A sáv kiszámolása 3 ms, 600 kamerapozíció 1,4 ms.
+Miért: a kamera messziről követ, így ha az útvonal irányát követné, az egész kép vele együtt fordulna. Egy körpálya végén ez egy teljes, 360°-os forgást jelentett a videó közepén, nagyjából 40°/mp sebességgel, ami ugrálásnak látszott. Korábban egy előre számolt, simított irány-sáv vezette a kamerát (`computeHeadings`, legfeljebb 4,8°/képkocka); ez közeli kameránál jó volt, távolinál nem.
 
-Egy korábbi próbálkozás az irányokat egy ablakban átlagolta. Ez oda-vissza útvonalnál hibás volt: az ellentétes irányok kioltották egymást, és a kamera összevissza ugrált.
+**Kamera-magasság (`computeGround`):** a rögzített magasság zajos (pontról pontra méterek), és a domborzat-kiemelés ezt megsokszorozza. Közvetlenül követve az egész kép fel-le billegett. Ezért a kamera egy simított magasságot céloz: nagyjából a kamera által látott szakaszra átlagolva (legfeljebb az útvonal ±15%-ára, háromszoros dobozszűrővel, ami közel Gauss-szerű). A nagy dombokat így is követi, a zajt nem.
+
+Mérve: követés közben legfeljebb 0,2° fordulás és 1 m-nél kisebb magasságváltozás képkockánként (20 mp, 30 fps).
 
 **Kamera elhelyezése (`MapView.setCamera`):**
 - a célpont mögött, a dőlésnek megfelelő magasságban áll, és `calculateCameraOptionsFromTo`-val néz a célpontra;
@@ -165,6 +164,7 @@ A videón ugyanaz az elrendezés látszik, mint a képen: cím, adatok, logó, f
 
 - **Útvonal:** a `partialRoute(progress)` a már bejárt részt adja, színezési értékekkel. A végén levő pötty a „fej”.
 - **Felpörgő számok:** a `LiveStats.snapshot` adja őket. **Mindig 0-ról indulnak**, és a végső értéken állnak meg.
+  - **Nem mozdul az elrendezés:** a betűméretet és az elrendezést a végső értékekre méri a rajzoló (`statsSizing`), és a számok egy rögzített jobb szélhez igazodnak, mint egy kilométeróra; a mértékegység helyben marad. Korábban a pörgő szám szélessége képkockánként változtatta a betűméretet, ettől az adatblokk, a magasságprofil és a takarás is mozgott.
   - A táv a látható útvonal megtett hányada szerint nő; az eltelt idő, a mozgásidő és a kalória az időbélyegek szerinti hányadban (időbélyeg nélkül a táv szerint).
   - Az emelkedés és a lejtés a megtett táv arányában nő.
   - Az átlagok (tempó, pulzus, watt) végig állandók, így az elrendezés nem ugrál.
@@ -182,7 +182,7 @@ A cél: a videó lejátszása közben ne töltsön a térkép, és a várakozás
 
 A kész videó **mindig** külön, teljes részletességű térképen készül, ezért minden készüléken ugyanolyan.
 
-**Előtöltés (`MapView.warmUp`, `FlyoverPath.warmUpShots`):** lejátszás előtt a kamera rejtve végigrepüli a pályát, és minden nézetnél megvárja, amíg minden csempe betöltődik. A nézetek nem egyenletesen jönnek: új nézet akkor kell, amikor a kép az előzőhöz képest érdemben változott (a kamera-távolság 18%-ával elmozdult, 0,22 zoomszintet változott, 15°-ot fordult vagy 6°-ot dőlt). Így 96 helyett kb. 30–45 nézet elég.
+**Előtöltés (`MapView.warmUp`, `FlyoverPath.warmUpShots`):** lejátszás előtt a kamera rejtve végigrepüli a pályát, és minden nézetnél megvárja, amíg minden csempe betöltődik. A nézetek nem egyenletesen jönnek: új nézet akkor kell, amikor a kép az előzőhöz képest érdemben változott (a kamera-távolság 12%-ával elmozdult, 0,18 zoomszintet változott, 12°-ot fordult vagy 5°-ot dőlt). Mivel a kamera már nem fordul az útvonallal, a nézetek jobban átfedik egymást, és 96 helyett kb. 30 nézet elég.
 
 Hogy a csempék meg is maradjanak, a videós térkép gyorsítótára nagyobb: a MapLibre a tárat „egy nézet csempéi × `maxTileCacheZoomLevels`” értékre korlátozza (alapból kb. 100 csempe), ezért ez 40, a felső határ (`maxTileCacheSize`) pedig 1200 csempe forrásonként.
 
@@ -196,7 +196,8 @@ Mérve (valódi videókártya, 20 mp-es videó, futás 4,7 km / kerékpár 41 km
 |---|---|---|
 | Előtöltés nélkül | – | 139 / 205 |
 | 96 egyenletes nézet, teljes részletesség | ~16 mp | 14 / 10 |
-| Könnyebb előnézet, 30–45 nézet | **~7,5 mp** | 13 / 16 (többnyire a böngésző saját tárából) |
+| Könnyebb előnézet, 30–45 nézet, forgó kamera | ~7,5 mp | 13 / 16 |
+| Könnyebb előnézet, nyugodt (nem forgó) kamera | **~5,3 mp** | 9 / 6 (többnyire a böngésző saját tárából) |
 | Ugyanez, egér a kapcsoló fölött 4 mp-ig, majd kattintás | **~3 mp** | 12 |
 | Telefonméretű nézet (390×844, 3× pixelarány, asztali videókártyán) | ~7 mp | – |
 
@@ -208,7 +209,7 @@ Valódi telefonon a rajzolás lassabb, ezért ott ezek az idők hosszabbak lehet
 
 ## Videókészítés (`FlyoverExporter`)
 
-Külön, rejtett, teljes részletességű térképen (`detail: 'full'`, `pixelRatio` 1). Közben az előnézet térképe felszabadul (telefonon két térkép nem biztos, hogy elfér a memóriában), és az előnézet helyén a ténylegesen elkészült képkockák látszanak (minden harmadik). Készítés után az előnézet újra elkészül, ez már a böngésző tárából jön (kb. 6 mp).
+Külön, rejtett, teljes részletességű térképen (`detail: 'full'`, `pixelRatio` 1). Közben **minden más le van tiltva** (`useLockWhile`): a szerkesztőpanel, a Kép/Videó kapcsoló, a fájlcsere, a vissza gomb és a nyelvváltó (`inert`, halványítva). A telefon „vissza” gesztusa sem lép ki, és az oldal bezárása előtt a böngésző rákérdez. Az előnézet alján nagy százalék, vastag sáv, becsült hátralévő idő és egy jól látható **Mégse** gomb jelenik meg. Közben az előnézet térképe felszabadul (telefonon két térkép nem biztos, hogy elfér a memóriában), és az előnézet helyén a ténylegesen elkészült képkockák látszanak (minden harmadik). Készítés után az előnézet újra elkészül, ez már a böngésző tárából jön (kb. 6 mp).
 
 Képkockánként, nem valós időben:
 
@@ -269,7 +270,7 @@ Csak a kötelező szerepel, minden térképes képen és videón a logó alatt, 
 
 | Tesztfájl | Mit ellenőriz |
 |---|---|
-| [map.test.ts](../tests/map.test.ts) | Földrajzi segédfüggvények; a kamera szakaszai, simasága (legfeljebb 6°/képkocka) és követési távolsága; a részleges útvonal; az élő adatok növekedése és korlátja; az utcás és a videós stílusok rétegei (3D épületek, utcaszínek, nagyobb településnevek); a sötét/világos tónus; a témaszínes árnyalás; a „legrosszabb” térképszín; a domborzat kiemelése; a számlálók 0-ról indulása; a kész kör kitartása a végén; az előtöltés nézeteinek száma és sűrűsége; az útvonal darabolása. |
+| [map.test.ts](../tests/map.test.ts) | Földrajzi segédfüggvények; a kamera szakaszai, simasága (legfeljebb 6°/képkocka) és követési távolsága; a részleges útvonal; az élő adatok növekedése és korlátja; az utcás és a videós stílusok rétegei (3D épületek, utcaszínek, nagyobb településnevek); a sötét/világos tónus; a témaszínes árnyalás; a „legrosszabb” térképszín; a domborzat kiemelése; a számlálók 0-ról indulása; a kész kör kitartása a végén; a nyugodt követés (lassú fordulás, simított magasság); az előtöltés nézeteinek száma és sűrűsége; az útvonal darabolása. |
 | [poster.test.ts](../tests/poster.test.ts) | WCAG-kontraszt: a mérés, minden téma, 300 véletlen saját szín, a takarás szükséges átlátszatlansága. |
 
 **Böngészős ellenőrzés:** a térképes rész WebGL-t igényel, ezért valódi böngészőben ellenőriztük. Sötét (Volt, Alkony) és világos (Kréta) témával kipróbáltuk az állóképet és a videót, mindkét videós stílussal, egy kerékpáros (41 km) és egy futós (4,7 km, kertvárosi) fájllal. Mértük az előtöltést és a lejátszás közbeni csempekéréseket, és ellenőriztük, hogy színváltáskor a térkép azonnal, újratöltés nélkül átszíneződik. Korábban egy rövid MP4 elkészítését is.
