@@ -429,7 +429,7 @@ export class PosterRenderer {
   }
 
   private drawLogo(name: string): void {
-    const { ctx, u, pad, scene } = this;
+    const { ctx, u, scene } = this;
     const baseline = this.logoBaseline();
     this.textShadow();
     this.setFont(PosterFonts.css(LOGO_FONT, 38 * u));
@@ -437,25 +437,27 @@ export class PosterRenderer {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     const text = name.toLocaleUpperCase();
-    ctx.fillText(text, pad, baseline);
+    const width = ctx.measureText(text).width;
+    // Centered horizontally, at the bottom of the safe area
+    const x = (scene.width - width) / 2;
+    ctx.fillText(text, x, baseline);
 
     // Underline drawn like a route: ring at the start, dot at the finish
-    const width = ctx.measureText(text).width;
     const y = baseline + 12 * u;
     ctx.strokeStyle = scene.colors.accent;
     ctx.lineWidth = 3 * u;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(pad + 4 * u, y);
-    ctx.quadraticCurveTo(pad + width * 0.5, y - 5 * u, pad + width, y + 1 * u);
+    ctx.moveTo(x + 4 * u, y);
+    ctx.quadraticCurveTo(x + width * 0.5, y - 5 * u, x + width, y + 1 * u);
     ctx.stroke();
     ctx.fillStyle = scene.colors.accent;
     ctx.beginPath();
-    ctx.arc(pad + width, y + 1 * u, 4 * u, 0, Math.PI * 2);
+    ctx.arc(x + width, y + 1 * u, 4 * u, 0, Math.PI * 2);
     ctx.fill();
     ctx.lineWidth = 2.5 * u;
     ctx.beginPath();
-    ctx.arc(pad + 4 * u, y, 4 * u, 0, Math.PI * 2);
+    ctx.arc(x + 4 * u, y, 4 * u, 0, Math.PI * 2);
     ctx.stroke();
   }
 
