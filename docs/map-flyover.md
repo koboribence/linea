@@ -31,7 +31,10 @@ ui/map/
   FlyoverExporter  képkockánkénti renderelés és videókódolás
   toScreenRoute    kivetített pontok → rajzolható útvonal (darabokra bontva)
 ui/video/
+  FlyoverPreview            az előre elkészíthető, előtöltött előnézeti térkép
   useFlyover, VideoStudio   videós előnézet, lejátszás, idővonal, készítés
+public/
+  sw.js         tartós csempetár (service worker)
 ```
 
 ## Fő elv: a térkép csak háttér, az útvonalat mi rajzoljuk
@@ -62,7 +65,7 @@ Minden stílus domborzati és vektoros adatból készül, ezért bármilyen köz
 
 **Az alapstílus átalakítása:**
 - kikerülnek az utcanevek, egyirányú-nyilak, útszám-pajzsok, vízfeliratok, külvárosi, megyei és országcímkék (zsúfoltak, és külön betűtípus-letöltést igényelnek);
-- a település- és városnevek 1,4-szer nagyobbak (zoomfüggő méretgörbénél minden pont mérete szorzódik), a színük a palettából jön;
+- a település- és városnevek 1,2-szer nagyobbak az alapnál (zoomfüggő méretgörbénél minden pont mérete szorzódik), a színük a palettából jön, visszafogott szürke: látszanak, de nem hangsúlyosak;
 - a domborzati árnyékolás a vonalak és feliratok alá kerül;
 - **videóban** az utcák középvonala a paletta színét kapja, a lapos épületeket 3D-s (`fill-extrusion`) épületek váltják a valódi magasságukkal (`render_height`), 13-as szinttől.
 
@@ -132,8 +135,9 @@ A kamera helye bármely `t ∈ [0, 1]` időpontra **állapot nélkül** kiszámo
 | Szakasz | `t` | Kamera |
 |---|---|---|
 | Nyitás | 0–0,12 | A teljes útvonal felülről (38° dőlés), majd ereszkedés a rajthoz |
-| Követés | 0,12–0,82 | Az útvonal mögött és fölött (62° dőlés), a kirajzolt nyomvonal „fejét” követve |
-| Zárás | 0,82–1 | Kihátrálás, és közben 70°-os körbefordulás, a teljes útvonallal a sávban |
+| Követés | 0,12–0,74 | Az útvonal mögött és fölött (62° dőlés), a kirajzolt nyomvonal „fejét” követve |
+| Zárás | 0,74–0,9 | Kihátrálás, és közben 70°-os körbefordulás, a teljes útvonallal a sávban |
+| Kész kör | 0,9–1 | A teljes útvonal látszik, a kamera lassan (12°-ot) tovább kering; 20 mp-es videónál 2 mp |
 
 **A szakaszok összefűzése:**
 - a távolság logaritmikus térben változik (természetes zoom);
@@ -168,7 +172,43 @@ A videón ugyanaz az elrendezés látszik, mint a képen: cím, adatok, logó, f
 - **Megjelenés:** az adatblokk a nyitás alatt jelenik meg (`statsOpacity`).
 - **Magasságprofil:** egy pont halad rajta (`elevationMarker`).
 
+## Előnézet és előtöltés (`FlyoverPreview`)
+
+A cél: a videó lejátszása közben ne töltsön a térkép, és a várakozás legyen rövid, telefonon is.
+
+**Könnyebb előnézet, azonos videó:** az előnézet térképe ugyanakkora (így a feliratok, vonalak és a keretezés pontosan olyan, mint a kész videón), de:
+- egy szinttel kevésbé részletes csempéket tölt (`detail: 'preview'`: utcák legfeljebb 13-as, domborzat 12-es szintig; a stílus felülírja a szerver alapértékét). A domborzatnál a 12 és a 13 között a képernyőn nem látszott különbség, a 13 kb. 2 mp-cel lassabb volt;
+- csak annyi pixelt rajzol, amennyi a képernyőn látszik (`pixelRatio` = kijelzett méret × eszköz-pixelarány, 0,5 és 1 között).
+
+A kész videó **mindig** külön, teljes részletességű térképen készül, ezért minden készüléken ugyanolyan.
+
+**Előtöltés (`MapView.warmUp`, `FlyoverPath.warmUpShots`):** lejátszás előtt a kamera rejtve végigrepüli a pályát, és minden nézetnél megvárja, amíg minden csempe betöltődik. A nézetek nem egyenletesen jönnek: új nézet akkor kell, amikor a kép az előzőhöz képest érdemben változott (a kamera-távolság 18%-ával elmozdult, 0,22 zoomszintet változott, 15°-ot fordult vagy 6°-ot dőlt). Így 96 helyett kb. 30–45 nézet elég.
+
+Hogy a csempék meg is maradjanak, a videós térkép gyorsítótára nagyobb: a MapLibre a tárat „egy nézet csempéi × `maxTileCacheZoomLevels`” értékre korlátozza (alapból kb. 100 csempe), ezért ez 40, a felső határ (`maxTileCacheSize`) pedig 1200 csempe forrásonként.
+
+**Előre kezdés:** amint az egér a „Kép | Videó” kapcsoló fölé ér, a videó térképe láthatatlanul elkészül és előtölt (`FlyoverPreview.prepare`). Kattintáskor a kész térkép átköltözik az előnézetbe. Érintőképernyőn ez nem segít (ott a koppintás maga a kattintás), és nem indul, ha a böngésző adattakarékos módot jelez. Az előkészített térkép a fájl végéig megmarad, így a Kép és a Videó közti váltás után azonnal ott van.
+
+**Töltés közben:** a háttérben a nyitókép látszik a teljes útvonallal és a végső adatokkal (halványítva), előtérben a „Videó előkészítése” kártya a haladással.
+
+Mérve (valódi videókártya, 20 mp-es videó, futás 4,7 km / kerékpár 41 km):
+
+| | Lejátszhatóig | Csempekérés lejátszás közben |
+|---|---|---|
+| Előtöltés nélkül | – | 139 / 205 |
+| 96 egyenletes nézet, teljes részletesség | ~16 mp | 14 / 10 |
+| Könnyebb előnézet, 30–45 nézet | **~7,5 mp** | 13 / 16 (többnyire a böngésző saját tárából) |
+| Ugyanez, egér a kapcsoló fölött 4 mp-ig, majd kattintás | **~3 mp** | 12 |
+| Telefonméretű nézet (390×844, 3× pixelarány, asztali videókártyán) | ~7 mp | – |
+
+Valódi telefonon a rajzolás lassabb, ezért ott ezek az idők hosszabbak lehetnek; mérni érdemes.
+
+**Hova megy az idő:** a mérés szerint asztali gépen nem a hálózat a szűk keresztmetszet. A második látogatás (minden csempe a készüléken) csak kb. 1 mp-cel gyorsabb. Az idő nagy része a csempék feldolgozása és a nézetek kirajzolása, mert a kevésbé részletes adatból a MapLibre a nagyobb nagyításokhoz újra feldolgozza ugyanazt a csempét. Lassú mobilneten viszont a hálózat számít, ott segít a tartós tárolás (lásd lent).
+
+**Előnézet lejátszása:** valós időben, 60 fps-sel fut az előtöltött csempéken.
+
 ## Videókészítés (`FlyoverExporter`)
+
+Külön, rejtett, teljes részletességű térképen (`detail: 'full'`, `pixelRatio` 1). Közben az előnézet térképe felszabadul (telefonon két térkép nem biztos, hogy elfér a memóriában), és az előnézet helyén a ténylegesen elkészült képkockák látszanak (minden harmadik). Készítés után az előnézet újra elkészül, ez már a böngésző tárából jön (kb. 6 mp).
 
 Képkockánként, nem valós időben:
 
@@ -176,29 +216,27 @@ Képkockánként, nem valós időben:
 2. `settle()`: várakozás, amíg minden csempe betölt (`idle`, legfeljebb 5 mp);
 3. `overlayAt(t)`: az útvonal kivetítése a már betöltött domborzatra, majd a felirat-réteg;
 4. a térkép és a felirat összeolvasztása egy vásznon;
-5. a kép átadása a kódolónak.
+5. a kép átadása a kódolónak (és az előnézetnek, `onFrame`).
 
 **Formátum:**
 - **Kodek:** H.264 / MP4, ha a böngésző tudja (ez kell az Instagramnak); különben VP9 / WebM.
 - **Felbontás:** 30 fps, a választott formátum mérete (pl. 1080×1920).
 - **Hossz:** 10, 20 vagy 30 mp (alapból 20). Egy régebbi, már nem létező hossz (pl. 15) mentve az alapértékre áll vissza.
 
-**Ellenőrizve:** egy 1 mp-es próbavideó szabályos MP4 (`ftyp isom`) lett.
+**Ellenőrizve:** egy 10 mp-es videó 52 mp alatt készült el (valódi videókártya), szabályos MP4 (`ftyp isom`, 10,2 MB).
 
 **Telefon:** lassabb lehet. Mivel minden képkocka megvárja a térképet, az eredmény akkor is sima.
 
-**Előtöltés (`MapView.warmUp`):** lejátszás előtt a kamera rejtve végigrepüli a pályát 96 ponton, és mindegyiknél megvárja, amíg minden csempe betöltődik („Térkép előkészítése… N%”). Csak ezután engedi a lejátszást és a videókészítést, így lejátszás közben nem tölt a térkép. Hogy a csempék meg is maradjanak, a videós térkép gyorsítótára nagyobb: a MapLibre a tárat „egy nézet csempéi × `maxTileCacheZoomLevels`” értékre korlátozza (alapból kb. 100 csempe), ezért ez 40, a felső határ (`maxTileCacheSize`) pedig 1200 csempe forrásonként.
+## Tartós csempetár (service worker)
 
-Mérve (valódi videókártya, 20 mp-es videó, futás 4,7 km / kerékpár 41 km):
+A [public/sw.js](../public/sw.js) a térkép által már letöltött csempéket, betűket és ikonokat a készüléken tartja (Cache Storage), így ugyanannak a környéknek a következő videója vagy képe a hálózat nélkül tölt. Szabályok:
+- csak azt tárolja, amit a térkép amúgy is kért; magától semmit nem tölt le;
+- a csempét azonnal továbbadja a térképnek, a mentés mellette történik;
+- legfeljebb 2000 bejegyzés (nagyjából 100–200 MB); fölötte a legrégebbiek törlődnek;
+- az OpenFreeMap csempeútvonalai adatverziót tartalmaznak, ezért nem avulnak el; a térkép indexe (melyik verzió az aktuális) nincs tárolva, mindig friss;
+- csak éles buildben működik (fejlesztés közben zavarná a gyors újratöltést).
 
-| | Előtöltés | Csempekérés lejátszás közben |
-|---|---|---|
-| Előtöltés nélkül | – | 139 / 205 |
-| 48 pont, alap gyorsítótár | ~10 mp | 138 / 205 (a tár kiürült) |
-| 48 pont, nagy gyorsítótár | ~10 mp | 21 / 30 |
-| 96 pont, nagy gyorsítótár | ~16 mp | 14 / 10 (többnyire a böngésző saját tárából) |
-
-**Előnézet:** valós időben, 60 fps-sel fut az előtöltött csempéken. A videókészítés emellett minden képkockánál meg is várja a térképet.
+Feltételek: az OpenFreeMap nem tiltja a tárolást (tömeges letöltésnél 3000 csempe a határ, egy videó ~200–400 csempét néz meg), a Mapterhorn nyílt adat, szabály nélkül. A csempék hosszú ideig gyorsítótárazhatók (utca 10 év, domborzat 7 nap), a böngésző saját tára is használja őket; a service worker ezt teszi tartóssá (a böngésző a saját tárát telefonon hamar üríti).
 
 ## Gyorsítások összefoglalva
 
@@ -207,21 +245,31 @@ Mérve (valódi videókártya, 20 mp-es videó, futás 4,7 km / kerékpár 41 km
 - **Kevesebb újrarenderelés:** rögzített kamera és rögzített keretezés, ezért a szöveg változása sem indít új térképet.
 - **Kevesebb letöltés:** a domborzati adat legfeljebb 13-as szintig, 512 px-es csempékben; az alapstílusból kikerültek a felesleges feliratok.
 - **Gyorsabb első betöltés:** előre megnyitott kapcsolat (`preconnect`) a térkép-szolgáltatókhoz az `index.html`-ben; mindkét alapstílus előtöltése, amikor az egér a „Kép | Videó” vagy a háttérválasztó fölé ér (`MapView.preload`).
-- **Nincs töltés lejátszás közben:** előtöltött repülés és nagy csempe-gyorsítótár (lásd fent).
+- **Nincs töltés lejátszás közben:** előtöltött repülés, adaptív nézetválasztás és nagy csempe-gyorsítótár (lásd fent).
+- **Könnyebb előnézet:** egy szinttel kevesebb csemperészlet, csak a látható pixelek; a videó ettől független, teljes részletességű.
+- **Előre kezdés:** a videó térképe már az egérmutatásra elkészül.
+- **Tartós tár:** service worker a már letöltött csempékhez.
 - **Színváltás újratöltés nélkül:** a stílus (alap / témaszín) és a kiemelő szín csak átfesti a futó térképet.
 - **Lusta betöltés:** a térkép- és videókódot csak akkor tölti le a böngésző, amikor kell.
 - **Olcsó kamera-számítás:** előre kiszámolt irány-sáv; képkockánként csak kiolvasás.
 
 ## Forrásmegjelölés
 
-A licencek előírják, ezért minden térképes képen és videón ott van, a logó alatt, kis, de olvasható betűvel:
-„© OpenStreetMap contributors · OpenFreeMap · OpenMapTiles · Terrain: © Mapterhorn” (minden stílusnál ugyanez).
+Csak a kötelező szerepel, minden térképes képen és videón a logó alatt, kis, de olvasható betűvel:
+„© OpenStreetMap · © OpenMapTiles · © Mapterhorn”.
+
+| Forrás | Miért kell |
+|---|---|
+| OpenStreetMap | ODbL; az OSMF irányelve szerint a „© OpenStreetMap” a minimum, a képen vagy közvetlenül mellette, olvashatóan. Videónál a térképen, plusz a stáblistában vagy a leírásban. |
+| OpenMapTiles | A csempék az OpenMapTiles-sémát követik (CC-BY); a termékeknek látható „OpenMapTiles” említés kell, állóképnél a kép mellett. |
+| Mapterhorn | A domborzati csempék ezt adják meg forrásként; a pontos előírás nem egyértelmű, ezért biztonságból szerepel. |
+| OpenFreeMap | Nem ír elő említést, ezért kimaradt. |
 
 ## Tesztek
 
 | Tesztfájl | Mit ellenőriz |
 |---|---|
-| [map.test.ts](../tests/map.test.ts) | Földrajzi segédfüggvények; a kamera szakaszai, simasága (legfeljebb 6°/képkocka) és követési távolsága; a részleges útvonal; az élő adatok növekedése és korlátja; az utcás és a videós stílusok rétegei (3D épületek, utcaszínek, nagyobb településnevek); a sötét/világos tónus; a témaszínes árnyalás; a „legrosszabb” térképszín; a domborzat kiemelése; a számlálók 0-ról indulása; az útvonal darabolása. |
+| [map.test.ts](../tests/map.test.ts) | Földrajzi segédfüggvények; a kamera szakaszai, simasága (legfeljebb 6°/képkocka) és követési távolsága; a részleges útvonal; az élő adatok növekedése és korlátja; az utcás és a videós stílusok rétegei (3D épületek, utcaszínek, nagyobb településnevek); a sötét/világos tónus; a témaszínes árnyalás; a „legrosszabb” térképszín; a domborzat kiemelése; a számlálók 0-ról indulása; a kész kör kitartása a végén; az előtöltés nézeteinek száma és sűrűsége; az útvonal darabolása. |
 | [poster.test.ts](../tests/poster.test.ts) | WCAG-kontraszt: a mérés, minden téma, 300 véletlen saját szín, a takarás szükséges átlátszatlansága. |
 
 **Böngészős ellenőrzés:** a térképes rész WebGL-t igényel, ezért valódi böngészőben ellenőriztük. Sötét (Volt, Alkony) és világos (Kréta) témával kipróbáltuk az állóképet és a videót, mindkét videós stílussal, egy kerékpáros (41 km) és egy futós (4,7 km, kertvárosi) fájllal. Mértük az előtöltést és a lejátszás közbeni csempekéréseket, és ellenőriztük, hogy színváltáskor a térkép azonnal, újratöltés nélkül átszíneződik. Korábban egy rövid MP4 elkészítését is.
@@ -230,6 +278,7 @@ A licencek előírják, ezért minden térképes képen és videón ott van, a l
 
 - **Épületek:** csak ott vannak, ahol az OpenStreetMap-ben fel vannak rajzolva; magasság híján 6 m-esek.
 - **Takarás:** a mi rajzunk nem tudja, ha az útvonalat egy hegy eltakarja; a vonal ilyenkor a hegy előtt látszik.
-- **Előtöltés ideje:** a videó előnézete kb. 10–16 mp után indul (hálózattól függ). Telefonon a nagyobb csempe-gyorsítótár több memóriát is igényel.
+- **Előtöltés ideje:** a videó előnézete asztali gépen kb. 7–8 mp után indul (egérmutatással kb. 3 mp); telefonon hosszabb lehet. A nagyobb csempe-gyorsítótár több memóriát igényel.
+- **Előnézet és videó:** az előnézet egy szinttel kevésbé részletes (kevesebb épület látszik), a videó teljes részletességű.
 - **Távoli követés:** a kamera messziről követ, ezért a nyomvonal egy része a magasságprofil vagy a cím közelébe is kerülhet (a szöveg alatti takarás ilyenkor is biztosítja az olvashatóságot).
 - **Videókészítés ideje:** tovább tart, mint a videó hossza (képkockánként vár a térképre). Valódi videókártyán ez elfogadható, szoftveres rajzolással lassú.

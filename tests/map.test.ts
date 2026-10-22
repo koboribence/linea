@@ -46,6 +46,32 @@ describe('FlyoverPath', () => {
     }
   });
 
+  it('ends by showing the finished route for a while', () => {
+    const hold = [FlyoverPath.HOLD_START, 0.95, 1].map((t) => path.shotAt(t));
+    for (const shot of hold) {
+      expect(shot.progress).toBe(1);
+      expect(shot.distance).toBeGreaterThan(path.shotAt(0.5).distance);
+    }
+    // Still moving slowly, not frozen
+    expect(hold[2]!.bearing).not.toBeCloseTo(hold[0]!.bearing, 1);
+  });
+
+  it('loads the flight ahead with few shots, each view close to the previous one', () => {
+    const shots = path.warmUpShots();
+    expect(shots.length).toBeLessThan(60);
+    expect(shots[0]).toEqual(path.shotAt(0));
+    expect(shots.at(-1)).toEqual(path.shotAt(1));
+    for (let i = 1; i < shots.length; i++) {
+      const [a, b] = [shots[i - 1]!, shots[i]!];
+      const moved =
+        haversine(a.target[1], a.target[0], b.target[1], b.target[0]) /
+        Math.min(a.distance, b.distance);
+      // Each step is just over the threshold at most (one of 600 checks later)
+      expect(moved).toBeLessThan(0.4);
+      expect(Math.abs(Math.log2(b.distance / a.distance))).toBeLessThan(0.45);
+    }
+  });
+
   it('follows from a bit closer than the still image shows the whole route', () => {
     const still = path.overview(FlyoverPath.STILL_PITCH, 0).distance;
     expect(path.shotAt(0.5).distance / still).toBeCloseTo(1 / 1.18, 2);
@@ -133,8 +159,8 @@ describe('MapStyles', () => {
       const layer = style.layers.find((l) => l.id === id);
       return layer?.type === 'symbol' ? layer.layout?.['text-size'] : undefined;
     };
-    expect(size('place_city')).toBeCloseTo(14);
-    expect(size('label_city')).toEqual(['interpolate', ['linear'], ['zoom'], 8, 14, 14, 28]);
+    expect(size('place_city')).toBeCloseTo(12);
+    expect(size('label_city')).toEqual(['interpolate', ['linear'], ['zoom'], 8, 12, 14, 24]);
   });
 
   it('gives videos streets and 3D buildings in the palette colors', () => {

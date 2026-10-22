@@ -1,14 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type RefObject,
+} from 'react';
 import { BRAND } from '../../brand';
 import type { Activity } from '../../domain/activity/Activity';
 import { StatPresenter } from '../../domain/format/StatPresenter';
 import { FlyoverPath } from '../../domain/map/FlyoverPath';
 import { LiveStats } from '../../domain/map/LiveStats';
 import { MapFraming } from '../../domain/map/MapFraming';
-import { MapStyles } from '../../domain/map/MapStyles';
 import type { PosterDesign } from '../../domain/poster/PosterDesign';
 import { POSTER_FORMATS } from '../../domain/poster/PosterFormat';
-import { PosterTheme } from '../../domain/poster/PosterTheme';
 import { PosterFonts } from '../../domain/poster/PosterFont';
 import { PosterRenderer } from '../../domain/poster/PosterRenderer';
 import type { PosterScene, PosterSceneBuilder } from '../../domain/poster/PosterScene';
@@ -19,6 +25,7 @@ import { useLocale } from '../../i18n/LocaleContext';
 import { FlyoverExporter, type VideoFile } from '../map/FlyoverExporter';
 import { MapView } from '../map/MapView';
 import { toScreenRoute } from '../map/toScreenRoute';
+import { FlyoverPreview } from './FlyoverPreview';
 
 export interface FlyoverInput {
   activity: Activity;
@@ -29,10 +36,21 @@ export interface FlyoverInput {
   builder: PosterSceneBuilder;
 }
 
+export interface FlyoverRefs {
+  /** Where the live preview map goes */
+  host: RefObject<HTMLDivElement | null>;
+  /** Text, stats and route over the map */
+  overlay: RefObject<HTMLCanvasElement | null>;
+  /** A still picture behind everything: the opening view while loading, frames while exporting */
+  backdrop: RefObject<HTMLCanvasElement | null>;
+}
+
 /** Route is drawn up to this many camera distances away. */
 const HAZE_FACTOR = 1.6;
-/** Views loaded ahead of playback; neighbouring views overlap, so these cover the flight. */
-const WARM_UP_SHOTS = 96;
+/** While exporting, every n-th finished frame is shown in the preview. */
+const SHOW_EVERY_FRAME = 3;
+/** Preview drawing resolution relative to the output: never below this, never above 1. */
+const MIN_PIXEL_RATIO = 0.5;
 
 export type ExportState =
   | { status: 'idle' }
@@ -40,105 +58,71 @@ export type ExportState =
   | { status: 'done'; file: VideoFile }
   | { status: 'failed' };
 
+/** What the preview shows: loading progress, the playable map, or an error. */
+export type PreviewState =
+  | { status: 'loading' }
+  | { status: 'preparing'; share: number }
+  | { status: 'ready' }
+  | { status: 'failed' };
+
 /**
- * The video mode: a live 3D map in `hostRef`, text drawn on `overlayRef`, play/scrub controls,
- * and export to a video file. Map, camera and overlay are the same for preview and export.
+ * The video mode: a live 3D map (prepared ahead by FlyoverPreview), text drawn over it,
+ * play/scrub controls, and export. The preview map is lighter (less tile detail, fewer pixels);
+ * videos are made on a separate full-detail map, so they are the same on every device.
+ * `displayScale` is how large the output appears on screen (for the preview's resolution).
  */
-export function useFlyover(
-  input: FlyoverInput,
-  hostRef: RefObject<HTMLDivElement | null>,
-  overlayRef: RefObject<HTMLCanvasElement | null>,
-) {
+export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale: number) {
   const { activity, stats, design, route, elevation, builder } = input;
   const { format } = useLocale();
   const { width, height } = POSTER_FORMATS[design.format];
-  const style = design.mapStyle;
 
-  const path = useMemo(
-    () => new FlyoverPath(route.geo, width / height, undefined, MapFraming.share(width, height)),
-    [route, width, height],
-  );
-  const look = useMemo(() => MapStyles.look(route.geo), [route]);
+  const path = useMemo(() => FlyoverPreview.pathFor(route, width, height), [route, width, height]);
+  const setup = useMemo(() => FlyoverPreview.setupFor(design, route, path), [design, route, path]);
   const live = useMemo(() => new LiveStats(route.geo, path), [route, path]);
-  const colors = PosterTheme.resolve(design.themeId, {
-    background: design.customBackground,
-    accent: design.customAccent,
-  });
-  const tone = MapStyles.tone(colors.background[0]);
-  const palette = useMemo(
-    () => MapStyles.palette('flyover', tone, style, colors.accent),
-    [tone, style, colors.accent],
-  );
-  // The map is created with the current colors; later changes are painted onto it
-  const paletteRef = useRef(palette);
-  paletteRef.current = palette;
   const presenter = useMemo(() => new StatPresenter(format), [format]);
 
-  // The live map; rebuilt only when its size, route or dark/light tone changes. Text and the
-  // route are drawn on top by our renderer and colors are repainted in place.
-  const [view, setView] = useState<MapView>();
-  const [mapFailed, setMapFailed] = useState(false);
-  const start = route.geo.coordinates[0]!;
+  const [exportState, setExportState] = useState<ExportState>({ status: 'idle' });
+  const exporting = exportState.status === 'rendering';
+
+  // The prepared preview map: created here, or already on hover over the mode switch
+  useSyncExternalStore(FlyoverPreview.subscribe, FlyoverPreview.getVersion);
+  const setupRef = useRef(setup);
+  setupRef.current = setup;
+  const key = FlyoverPreview.keyOf(setup);
   useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    let cancelled = false;
-    let created: MapView | undefined;
-    MapView.create(host, {
-      width,
-      height,
-      kind: 'flyover',
-      tone,
-      look,
-      palette: paletteRef.current,
-      center: start,
-    })
-      .then((mapView) => {
-        if (cancelled) return mapView.destroy();
-        created = mapView;
-        // The camera's focal point sits between title and stats, like the route on images
-        const band = MapFraming.band(width, height);
-        mapView.setPadding(band.top, height - band.bottom);
-        setMapFailed(false);
-        setView(mapView);
-      })
-      .catch(() => !cancelled && setMapFailed(true));
-    return () => {
-      cancelled = true;
-      created?.destroy();
-      setView(undefined);
-    };
-    // The start point only matters for the very first camera position
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hostRef, width, height, look, tone]);
+    const host = refs.host.current;
+    if (exporting || !host) return;
+    const preview = FlyoverPreview.prepare(setupRef.current);
+    preview.mountIn(host);
+    return () => preview.unmount();
+  }, [refs.host, key, exporting]);
+  const current = FlyoverPreview.current;
+  const preview = !exporting && current?.key === key ? current : undefined;
 
-  // Style and color changes only repaint the running map
-  useEffect(() => view?.recolor(palette), [view, palette]);
+  // Color and style changes only repaint the running map
+  useEffect(() => preview?.recolor(setup.palette), [preview, setup.palette]);
 
-  // Before anything plays, the camera flies the whole path once (hidden) and loads every
-  // tile on the way, so playback never waits for the map
-  const [warm, setWarm] = useState<{ view: MapView; path: FlyoverPath; share: number }>();
+  // Draw only as many pixels as the preview shows on screen
   useEffect(() => {
-    if (!view) return;
-    const abort = new AbortController();
-    view
-      .warmUp(path.shots(WARM_UP_SHOTS), (share) => setWarm({ view, path, share }), abort.signal)
-      .catch(() => undefined);
-    return () => abort.abort();
-  }, [view, path]);
-  const warmShare = warm?.view === view && warm?.path === path ? warm.share : 0;
-  const ready = view !== undefined && warmShare >= 1;
+    const ratio = displayScale * window.devicePixelRatio;
+    preview?.setPixelRatio(Math.min(1, Math.max(MIN_PIXEL_RATIO, ratio)));
+  }, [preview, displayScale]);
 
-  const moveTo = useCallback((t: number) => view?.setCamera(path.shotAt(t)), [view, path]);
+  const view = preview?.status === 'ready' ? preview.view : undefined;
+  const previewState: PreviewState = !preview
+    ? { status: 'loading' }
+    : preview.status === 'preparing'
+      ? { status: 'preparing', share: preview.share }
+      : { status: preview.status };
 
-  // Route, text and stats over the map at moment t: same layout as the image,
+  // Route, text and stats over a map at moment t: same layout as the image,
   // with the route drawing itself and counters ticking up
-  const overlayAt = useCallback(
-    (t: number): PosterScene => {
+  const sceneAt = useCallback(
+    (map: MapView, t: number): PosterScene => {
       const shot = path.shotAt(t);
       const partial = path.partialRoute(shot.progress);
       // Far ahead the map fades into haze; a crisp line there would only clutter the sky
-      const projected = view?.project(partial.coordinates, shot.distance * HAZE_FACTOR) ?? [];
+      const projected = map.project(partial.coordinates, shot.distance * HAZE_FACTOR);
       const routePoints = toScreenRoute(projected, partial.values);
       const finished = t >= FlyoverPath.OUTRO_START;
       const current = finished ? stats : live.snapshot(shot.progress, stats);
@@ -158,7 +142,7 @@ export function useFlyover(
         elevationMarker: shot.progress,
       };
     },
-    [view, path, live, stats, presenter, activity, builder, design, route, elevation],
+    [path, live, stats, presenter, activity, builder, design, route, elevation],
   );
 
   // Text needs its fonts before the first frame; fallback letters would flash otherwise
@@ -173,6 +157,46 @@ export function useFlyover(
       cancelled = true;
     };
   }, [font, design.fontId]);
+  const fontsLoaded = fontsReady === design.fontId;
+
+  // While loading: the opening view with the whole route and the final stats, in the back
+  const backdrop = preview?.backdrop;
+  useEffect(() => {
+    const canvas = refs.backdrop.current;
+    const overlay = refs.overlay.current;
+    if (view || exporting || !canvas || !overlay || !backdrop || !fontsLoaded) return;
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext('2d')?.drawImage(backdrop.image, 0, 0, width, height);
+    const statItems = presenter.groups(activity, stats).flatMap((g) => g.items);
+    PosterRenderer.render(
+      overlay,
+      builder.build({
+        activity,
+        design,
+        statItems,
+        route,
+        elevation,
+        map: { kind: 'flyover', route: toScreenRoute(backdrop.route, route.geo.values) },
+        brandName: BRAND.name,
+      }),
+    );
+  }, [
+    view,
+    exporting,
+    backdrop,
+    fontsLoaded,
+    refs,
+    width,
+    height,
+    presenter,
+    activity,
+    stats,
+    builder,
+    design,
+    route,
+    elevation,
+  ]);
 
   // Playback position 0…1, and whether it's running
   const [time, setTime] = useState(0);
@@ -181,11 +205,11 @@ export function useFlyover(
 
   const drawAt = useCallback(
     (t: number) => {
-      if (!ready || fontsReady !== design.fontId) return;
-      moveTo(t);
-      if (overlayRef.current) PosterRenderer.render(overlayRef.current, overlayAt(t));
+      if (!view || !fontsLoaded) return;
+      view.setCamera(path.shotAt(t));
+      if (refs.overlay.current) PosterRenderer.render(refs.overlay.current, sceneAt(view, t));
     },
-    [ready, fontsReady, design.fontId, moveTo, overlayAt, overlayRef],
+    [view, fontsLoaded, path, sceneAt, refs],
   );
 
   // Paused: show the chosen moment (also redraws when the design changes)
@@ -193,7 +217,7 @@ export function useFlyover(
     if (!playing) drawAt(time);
   }, [playing, time, drawAt]);
 
-  // Playing: real-time preview over the warmed-up tiles; the export also waits for each frame
+  // Playing: real-time preview over the tiles loaded ahead
   useEffect(() => {
     if (!playing) return;
     const seconds = design.videoSeconds;
@@ -223,23 +247,46 @@ export function useFlyover(
     setTime(t);
   }, []);
 
-  // Export
-  const [exportState, setExportState] = useState<ExportState>({ status: 'idle' });
+  // Export: on its own full-detail map, off screen; the preview shows the finished frames
   const abort = useRef<AbortController>(undefined);
-
   const startExport = useCallback(async () => {
-    if (!view || !ready) return;
+    if (!view) return;
     setPlaying(false);
     abort.current = new AbortController();
     setExportState({ status: 'rendering', share: 0 });
+    // The preview map goes away meanwhile: phones may not have memory for two maps
+    FlyoverPreview.release();
+    let map: MapView | undefined;
     try {
+      const { tone, look, palette } = setupRef.current;
       await PosterRenderer.loadFonts(font);
-      const file = await new FlyoverExporter(view).export({
+      map = await MapView.create(FlyoverPreview.offscreen(), {
+        width,
+        height,
+        kind: 'flyover',
+        tone,
+        look,
+        palette,
+        detail: 'full',
+        center: route.geo.coordinates[0]!,
+      });
+      const band = MapFraming.band(width, height);
+      map.setPadding(band.top, height - band.bottom);
+      const exportMap = map;
+      let frames = 0;
+      const file = await new FlyoverExporter(exportMap).export({
         seconds: design.videoSeconds,
-        moveTo,
-        overlayAt,
+        moveTo: (t) => exportMap.setCamera(path.shotAt(t)),
+        overlayAt: (t) => sceneAt(exportMap, t),
         signal: abort.current.signal,
         onProgress: (share) => setExportState({ status: 'rendering', share }),
+        onFrame: (frame) => {
+          const canvas = refs.backdrop.current;
+          if (frames++ % SHOW_EVERY_FRAME !== 0 || !canvas) return;
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext('2d')?.drawImage(frame, 0, 0);
+        },
       });
       setExportState({ status: 'done', file });
     } catch (error) {
@@ -247,9 +294,9 @@ export function useFlyover(
       setExportState(cancelled ? { status: 'idle' } : { status: 'failed' });
       if (!cancelled) console.error(error);
     } finally {
-      drawAt(timeRef.current);
+      map?.destroy();
     }
-  }, [view, ready, font, design.videoSeconds, moveTo, overlayAt, drawAt]);
+  }, [view, font, width, height, route, design.videoSeconds, path, sceneAt, refs]);
 
   const cancelExport = useCallback(() => abort.current?.abort(), []);
 
@@ -257,10 +304,8 @@ export function useFlyover(
   useEffect(() => setExportState({ status: 'idle' }), [design, route]);
 
   return {
-    ready,
-    /** Share of the flight loaded ahead of playback, 0…1 */
-    preparing: view === undefined ? undefined : warmShare,
-    mapFailed,
+    ready: view !== undefined,
+    preview: previewState,
     width,
     height,
     time,

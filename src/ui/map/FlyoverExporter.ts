@@ -15,6 +15,8 @@ export interface ExportOptions {
   /** Route, text and stats drawn over the loaded map at moment t */
   overlayAt: (t: number) => PosterScene;
   onProgress?: (share: number) => void;
+  /** Each finished frame (map + text), e.g. to show what is being made */
+  onFrame?: (frame: HTMLCanvasElement) => void;
   signal?: AbortSignal;
 }
 
@@ -37,6 +39,7 @@ export class FlyoverExporter {
     moveTo,
     overlayAt,
     onProgress,
+    onFrame,
     signal,
   }: ExportOptions): Promise<VideoFile> {
     const mb = await import('mediabunny');
@@ -75,6 +78,7 @@ export class FlyoverExporter {
         ctx.drawImage(this.view.canvas, 0, 0, width, height);
         PosterRenderer.render(overlay, overlayAt(t));
         ctx.drawImage(overlay, 0, 0);
+        onFrame?.(frame);
 
         await source.add(i / fps, 1 / fps);
         onProgress?.((i + 1) / total);

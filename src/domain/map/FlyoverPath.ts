@@ -31,12 +31,21 @@ const MAX_TURN_STEP = 0.8;
 const FOLLOW_PITCH = 62;
 const OVERVIEW_PITCH = 38;
 const END_PITCH = 50;
+/** Moments checked when picking warm-up shots. */
+const WARM_UP_STEPS = 600;
+/**
+ * How much the view may change before the next warm-up shot: moved by this share of the camera
+ * distance, zoomed by this many zoom levels, turned or tilted by this many degrees.
+ */
+const WARM_UP_CHANGE = { moved: 0.18, zoomed: 0.22, turned: 15, tilted: 6 };
 /** The chase camera is this much closer than the still image's view of the whole route. */
 const FOLLOW_ZOOM = 1.18;
 /** Opening and ending shots are at least this much further away than the chase camera. */
 const PULL_BACK = 1.25;
 /** The ending circles this far around the route while pulling back, degrees. */
 const END_ORBIT = 70;
+/** While the finished route is shown, the camera keeps drifting around it this far, degrees. */
+const HOLD_ORBIT = 12;
 
 /**
  * Camera choreography for a route flyover:
@@ -45,7 +54,9 @@ const END_ORBIT = 70;
  */
 export class FlyoverPath {
   static readonly INTRO_END = 0.12;
-  static readonly OUTRO_START = 0.82;
+  static readonly OUTRO_START = 0.74;
+  /** From here the whole finished route is on screen until the end */
+  static readonly HOLD_START = 0.9;
   /** Fixed tilt of still images (north up) */
   static readonly STILL_PITCH = 50;
 
@@ -94,23 +105,49 @@ export class FlyoverPath {
   }
 
   shotAt(t: number): CameraShot {
-    const { INTRO_END, OUTRO_START } = FlyoverPath;
+    const { INTRO_END, OUTRO_START, HOLD_START } = FlyoverPath;
     if (t < INTRO_END) {
       return FlyoverPath.blend(this.overviewShot(), this.followShot(0), ease(t / INTRO_END));
     }
     if (t < OUTRO_START) {
       return this.followShot(easeSine((t - INTRO_END) / (OUTRO_START - INTRO_END)));
     }
-    return FlyoverPath.blend(
-      this.followShot(1),
-      this.endShot(),
-      ease((t - OUTRO_START) / (1 - OUTRO_START)),
-    );
+    if (t < HOLD_START) {
+      return FlyoverPath.blend(
+        this.followShot(1),
+        this.endShot(0),
+        ease((t - OUTRO_START) / (HOLD_START - OUTRO_START)),
+      );
+    }
+    // The finished route stays in view; a slow drift (starting from rest) keeps it alive
+    const hold = Math.min(1, (t - HOLD_START) / (1 - HOLD_START));
+    return this.endShot(HOLD_ORBIT * hold * hold);
   }
 
-  /** `count` evenly spaced shots of the whole flight, start and end included. */
-  shots(count: number): CameraShot[] {
-    return Array.from({ length: count }, (_, i) => this.shotAt(i / (count - 1)));
+  /**
+   * Shots that together show everything the flight will show, for loading the map ahead:
+   * a new one whenever the view has changed noticeably since the last (moved, zoomed, turned
+   * or tilted). Where the views overlap a lot, far fewer than evenly spaced ones.
+   */
+  warmUpShots(): CameraShot[] {
+    const shots = [this.shotAt(0)];
+    for (let i = 1; i <= WARM_UP_STEPS; i++) {
+      const shot = this.shotAt(i / WARM_UP_STEPS);
+      const last = shots.at(-1)!;
+      const moved =
+        haversine(last.target[1], last.target[0], shot.target[1], shot.target[0]) /
+        Math.min(last.distance, shot.distance);
+      const zoomed = Math.abs(Math.log2(shot.distance / last.distance));
+      const turned = Math.abs(((shot.bearing - last.bearing + 540) % 360) - 180);
+      const tilted = Math.abs(shot.pitch - last.pitch);
+      const changed =
+        moved > WARM_UP_CHANGE.moved ||
+        zoomed > WARM_UP_CHANGE.zoomed ||
+        turned > WARM_UP_CHANGE.turned ||
+        tilted > WARM_UP_CHANGE.tilted;
+      if (changed || i === WARM_UP_STEPS) shots.push(shot);
+    }
+    return shots;
   }
 
   /**
@@ -252,15 +289,17 @@ export class FlyoverPath {
     };
   }
 
-  private endShot(): CameraShot {
+  /** The whole route in view, `drift` degrees further around than the end of the orbit. */
+  private endShot(drift: number): CameraShot {
+    const bearing = this.headingAt(1) + END_ORBIT + drift;
     return {
       target: this.center,
       targetElevation: this.elevationAt(0.5),
       distance: Math.max(
-        this.fitDistance(END_PITCH, this.headingAt(1) + END_ORBIT, this.share) * 1.2,
+        this.fitDistance(END_PITCH, bearing, this.share) * 1.2,
         this.chaseDistance * PULL_BACK,
       ),
-      bearing: this.headingAt(1) + END_ORBIT,
+      bearing: (bearing + 360) % 360,
       pitch: END_PITCH,
       progress: 1,
     };

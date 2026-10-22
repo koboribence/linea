@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
 import type { Activity } from '../../domain/activity/Activity';
 import { useLocale } from '../../i18n/LocaleContext';
 import { Segmented } from '../controls/Segmented';
 import { MapView } from '../map/MapView';
+import { FlyoverPreview } from '../video/FlyoverPreview';
 import { VideoStudio } from '../video/VideoStudio';
 import { EditorPanel, type EditorMode } from './EditorPanel';
 import { PosterCanvas } from './PosterCanvas';
@@ -27,12 +28,26 @@ export function EditorScreen({ activity: loaded }: { activity: Activity }) {
   ].filter(Boolean);
   const panPhoto = design.background === 'photo' && editor.hasPhoto ? editor.panPhoto : undefined;
 
+  // Pointing at the mode switch hints at the video: start loading its map right away
+  // (not on touch, where the tap itself opens it; not when the browser asks to save data)
+  const prepareVideo = useCallback(
+    (event: PointerEvent) => {
+      MapView.preload();
+      const saveData = (navigator as { connection?: { saveData?: boolean } }).connection?.saveData;
+      if (mode !== 'image' || !route || event.pointerType !== 'mouse' || saveData) return;
+      FlyoverPreview.prepare(FlyoverPreview.setupFor(design, route));
+    },
+    [mode, route, design],
+  );
+  // The prepared video map belongs to this file
+  useEffect(() => () => FlyoverPreview.release(), []);
+
   return (
     <div className="editor">
       <div className="editor__preview">
         {/* The flyover video needs a route to fly along */}
         {route && (
-          <div className="mode-switch" onPointerEnter={MapView.preload}>
+          <div className="mode-switch" onPointerEnter={prepareVideo}>
             <Segmented
               label={i18n.t('mode.label')}
               options={[

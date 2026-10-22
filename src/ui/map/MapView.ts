@@ -3,6 +3,7 @@ import type { CameraShot } from '../../domain/map/FlyoverPath';
 import {
   BASE_STYLE_URLS,
   MapStyles,
+  type MapDetail,
   type MapKind,
   type MapLook,
   type MapPalette,
@@ -11,9 +12,13 @@ import {
 import { offset } from '../../domain/stats/geo';
 
 export interface MapViewOptions {
-  /** Output size in pixels; the map renders at exactly this resolution */
+  /** Output size in pixels; the map is laid out at exactly this size */
   width: number;
   height: number;
+  /** Drawing resolution relative to the output size: 1 for exports, less for previews */
+  pixelRatio?: number;
+  /** Tile detail: lighter for previews, full for exports */
+  detail?: MapDetail;
   kind: MapKind;
   /** Dark or light base map */
   tone: MapTone;
@@ -70,6 +75,8 @@ export class MapView {
     private readonly toLngLat: (coordinate: [number, number]) => LngLat,
     /** Terrain height multiplier, so the camera aims at the raised ground */
     private readonly exaggeration: number,
+    /** Layout size, for telling which projected points are on screen */
+    private readonly size: { width: number; height: number },
   ) {}
 
   /** Starts downloading the map code and base style early, e.g. when a map option is hovered. */
@@ -97,12 +104,13 @@ export class MapView {
 
     const map = new Map({
       container,
-      style: MapStyles.build(options.kind, base, options.look, options.palette),
+      style: MapStyles.build(options.kind, base, options.look, options.palette, options.detail),
       center: options.center,
       zoom: 12,
       interactive: false,
       attributionControl: false, // the credits are drawn onto the image itself
-      pixelRatio: 1, // the container already has the output size
+      // The container has the output size; previews draw fewer pixels and are scaled up
+      pixelRatio: options.pixelRatio ?? 1,
       maxPitch: 85,
       fadeDuration: 0,
       // MapLibre caps its cache at (tiles in one view × zoom levels); room for many views
@@ -128,11 +136,22 @@ export class MapView {
       container,
       ([lng, lat]) => new LngLat(lng, lat),
       options.look.exaggeration,
+      { width: options.width, height: options.height },
     );
   }
 
   get canvas(): HTMLCanvasElement {
     return this.map.getCanvas();
+  }
+
+  /** Moves the map into another element (e.g. from off screen into the preview). */
+  mountIn(parent: HTMLElement): void {
+    if (this.container.parentElement !== parent) parent.appendChild(this.container);
+  }
+
+  /** Changes the drawing resolution, e.g. to match how large the preview is on screen. */
+  setPixelRatio(ratio: number): void {
+    if (Math.abs(this.map.getPixelRatio() - ratio) > 0.01) this.map.setPixelRatio(ratio);
   }
 
   /** Puts the camera where the shot says, never below the terrain. */
@@ -210,7 +229,7 @@ export class MapView {
     coordinates: [number, number][],
     maxDistance = Infinity,
   ): ({ x: number; y: number } | undefined)[] {
-    const { width, height } = this.canvas;
+    const { width, height } = this.size;
     return coordinates.map((coordinate) => {
       // Behind the camera a projection lands in nonsense places, so those are skipped first
       if (!this.inFront(coordinate, maxDistance)) return undefined;

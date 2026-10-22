@@ -1,21 +1,27 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { POSTER_FORMATS } from '../../domain/poster/PosterFormat';
 import { useLocale } from '../../i18n/LocaleContext';
 import { PosterExporter } from '../editor/PosterExporter';
-import { useFlyover, type FlyoverInput } from './useFlyover';
+import { useFlyover, type FlyoverInput, type PreviewState } from './useFlyover';
 
 /**
  * Video mode preview: the live 3D map with the text drawn over it, playback controls and export.
- * The map runs at the real output size; CSS only scales the stage down to fit.
+ * The stage is laid out at the real output size; CSS only scales it down to fit. While the map
+ * loads, the opening view stays in the back with the progress in front.
  */
 export function VideoStudio({ input }: { input: FlyoverInput }) {
   const { i18n } = useLocale();
-  const hostRef = useRef<HTMLDivElement>(null);
-  const overlayRef = useRef<HTMLCanvasElement>(null);
+  const host = useRef<HTMLDivElement>(null);
+  const overlay = useRef<HTMLCanvasElement>(null);
+  const backdrop = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
-  const video = useFlyover(input, hostRef, overlayRef);
-  const scale = useStageScale(frameRef, video.width);
+  const width = POSTER_FORMATS[input.design.format].width;
+  const scale = useStageScale(frameRef, width);
+  const refs = useMemo(() => ({ host, overlay, backdrop }), []);
+  const video = useFlyover(input, refs, scale);
 
-  const { exportState } = video;
+  const { exportState, preview } = video;
+  const rendering = exportState.status === 'rendering';
   const fileName =
     exportState.status === 'done'
       ? PosterExporter.fileName(input.activity, exportState.file.extension)
@@ -37,26 +43,21 @@ export function VideoStudio({ input }: { input: FlyoverInput }) {
           className="video-stage"
           style={{ width: video.width, height: video.height, transform: `scale(${scale})` }}
         >
+          {/* The opening view while the map loads, finished frames while a video is made */}
+          <canvas
+            ref={backdrop}
+            className="video-stage__layer"
+            hidden={video.ready && !rendering}
+          />
           {/* Hidden while the camera flies around loading the map ahead of playback */}
           <div
-            ref={hostRef}
-            className="video-stage__map"
-            style={{ opacity: video.ready ? 1 : 0 }}
+            ref={host}
+            className="video-stage__layer"
+            style={{ opacity: video.ready && !rendering ? 1 : 0 }}
           />
-          <canvas ref={overlayRef} className="video-stage__overlay" />
+          <canvas ref={overlay} className="video-stage__layer" hidden={rendering} />
         </div>
-        {!video.ready && !video.mapFailed && (
-          <p className="frame-status" role="status">
-            {video.preparing === undefined
-              ? i18n.t('map.loading')
-              : i18n.t('video.preparing', { percent: Math.round(video.preparing * 100) })}
-          </p>
-        )}
-        {video.mapFailed && (
-          <p className="frame-status frame-status--error" role="alert">
-            {i18n.t('map.failed')}
-          </p>
-        )}
+        <FrameStatus preview={preview} rendering={rendering} />
       </div>
 
       <div className="video-controls">
@@ -146,6 +147,37 @@ export function VideoStudio({ input }: { input: FlyoverInput }) {
       </div>
       {exportState.status === 'rendering' && <p className="field__hint">{i18n.t('video.hint')}</p>}
     </>
+  );
+}
+
+/** Over the preview: what is loading and how far it got, or what is being made. */
+function FrameStatus({ preview, rendering }: { preview: PreviewState; rendering: boolean }) {
+  const { i18n } = useLocale();
+  if (rendering) return null;
+  if (preview.status === 'failed') {
+    return (
+      <p className="frame-status frame-status--error" role="alert">
+        {i18n.t('map.failed')}
+      </p>
+    );
+  }
+  if (preview.status === 'ready') return null;
+  const share = preview.status === 'preparing' ? preview.share : 0;
+  return (
+    <div className="frame-loading" role="status">
+      <div className="frame-loading__card">
+        <strong>{i18n.t('video.preparingTitle')}</strong>
+        <div className="render-progress__bar">
+          <span style={{ width: `${Math.round(share * 100)}%` }} />
+        </div>
+        <span className="frame-loading__detail">
+          {preview.status === 'loading'
+            ? i18n.t('map.loading')
+            : i18n.t('video.preparing', { percent: Math.round(share * 100) })}
+        </span>
+        <span className="frame-loading__hint">{i18n.t('video.preparingHint')}</span>
+      </div>
+    </div>
   );
 }
 

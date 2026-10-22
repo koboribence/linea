@@ -27,9 +27,20 @@ const TERRAIN_TILE_SIZE = 512;
 /** 512 px tiles at z13 carry about as much detail as 256 px tiles at z14 */
 const TERRAIN_MAXZOOM = 13;
 
-const ATTRIBUTION = [
-  '© OpenStreetMap contributors · OpenFreeMap · OpenMapTiles · Terrain: © Mapterhorn',
-];
+/**
+ * Only the credits the licenses require on images and videos: OpenStreetMap (ODbL; the OSMF
+ * guideline accepts "© OpenStreetMap"), OpenMapTiles (CC-BY, its schema shapes the tiles) and
+ * Mapterhorn (the terrain tiles name it as their attribution). OpenFreeMap asks for nothing.
+ */
+const ATTRIBUTION = ['© OpenStreetMap · © OpenMapTiles · © Mapterhorn'];
+
+/**
+ * Tile detail: `preview` stops one zoom level earlier (about a quarter of the tiles, drawn
+ * a little simpler) for the live preview; `full` is used for exported videos and images.
+ */
+export type MapDetail = 'preview' | 'full';
+/** Highest zoom level loaded for previews, per source type */
+const PREVIEW_MAXZOOM = { vector: 13, terrain: TERRAIN_MAXZOOM - 1 };
 
 /** What a route's map needs apart from its style. */
 export interface MapLook {
@@ -67,7 +78,7 @@ const FLYOVER: Record<MapTone, MapPalette> = {
     land: '#0c0c0c',
     road: '#4b5873',
     building: '#252d3d',
-    label: '#8a93a6',
+    label: '#6b7385',
     highlight: '#7486ab',
     shadow: '#000000',
     shade: '#1b2233',
@@ -78,7 +89,7 @@ const FLYOVER: Record<MapTone, MapPalette> = {
     land: '#f2f3f0',
     road: '#9aa2ad',
     building: '#e1e4e8',
-    label: '#4a4f57',
+    label: '#6e747d',
     highlight: '#ffffff',
     shadow: '#6b7480',
     shade: '#d5dae0',
@@ -93,7 +104,7 @@ const STREETS: Record<MapTone, MapPalette> = {
     land: '#0c0c0c',
     road: '#3c3c3c',
     building: '#0a0a0a',
-    label: '#8a93a6',
+    label: '#6b7385',
     highlight: '#3a4152',
     shadow: '#000000',
     shade: '#141821',
@@ -104,7 +115,7 @@ const STREETS: Record<MapTone, MapPalette> = {
     land: '#f2f3f0',
     road: '#d5d5d5',
     building: '#eaeae5',
-    label: '#4a4f57',
+    label: '#6e747d',
     highlight: '#ffffff',
     shadow: '#9aa1ab',
     shade: '#e4e6e9',
@@ -141,7 +152,7 @@ const DROPPED_LAYERS = [
   /^label_(other|state|country)/,
   /^airport/,
 ];
-/** Town and city names (both styles), drawn larger than the base styles' tiny labels. */
+/** Town and city names (both styles), a bit larger than the base styles' tiny labels. */
 const PLACE_NAMES = [
   'place_village',
   'place_town',
@@ -152,7 +163,7 @@ const PLACE_NAMES = [
   'label_city',
   'label_city_capital',
 ];
-const PLACE_NAME_SCALE = 1.4;
+const PLACE_NAME_SCALE = 1.2;
 /** Road centre lines that get the palette color in videos, so streets stay visible. */
 const ROAD_LINES = [
   'highway_path',
@@ -171,12 +182,12 @@ type PaintKey =
   | 'text-color';
 export type PalettePaint = [layer: string, property: PaintKey, color: string];
 
-const dem = (): SourceSpecification => ({
+const dem = (detail: MapDetail): SourceSpecification => ({
   type: 'raster-dem',
   tiles: [TERRAIN_TILES],
   encoding: 'terrarium',
   tileSize: TERRAIN_TILE_SIZE,
-  maxzoom: TERRAIN_MAXZOOM,
+  maxzoom: detail === 'preview' ? PREVIEW_MAXZOOM.terrain : TERRAIN_MAXZOOM,
 });
 
 /**
@@ -299,6 +310,7 @@ export class MapStyles {
     base: StyleSpecification,
     look: MapLook,
     palette: MapPalette,
+    detail: MapDetail = 'full',
   ): StyleSpecification {
     let layers = base.layers
       .filter((layer) => !DROPPED_LAYERS.some((pattern) => pattern.test(layer.id)))
@@ -316,10 +328,10 @@ export class MapStyles {
     return {
       ...base,
       sources: {
-        ...base.sources,
-        terrain: dem(),
+        ...MapStyles.limitDetail(base.sources, detail),
+        terrain: dem(detail),
         // Shading from its own source looks better than sharing the 3D terrain's
-        shading: dem(),
+        shading: dem(detail),
       },
       layers,
       terrain: { source: 'terrain', exaggeration: look.exaggeration },
@@ -327,6 +339,19 @@ export class MapStyles {
       // Color changes apply at once (a fade would also leave stale colors on the 3D terrain)
       transition: { duration: 0, delay: 0 },
     };
+  }
+
+  /** Vector sources stop a zoom level earlier for previews (the style overrides the server's). */
+  private static limitDetail(
+    sources: StyleSpecification['sources'],
+    detail: MapDetail,
+  ): StyleSpecification['sources'] {
+    if (detail === 'full') return sources;
+    const limited = Object.entries(sources).map(([id, source]) => [
+      id,
+      source.type === 'vector' ? { ...source, maxzoom: PREVIEW_MAXZOOM.vector } : source,
+    ]);
+    return Object.fromEntries(limited) as StyleSpecification['sources'];
   }
 
   private static enlargePlaceName(layer: LayerSpecification): LayerSpecification {

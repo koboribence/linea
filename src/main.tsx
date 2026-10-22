@@ -9,6 +9,12 @@ import { LocaleProvider } from './i18n/LocaleContext';
 
 document.title = BRAND.name;
 
+// Keeps downloaded map tiles on the device (not in development, where it would cache stale code
+// paths and confuse hot reload)
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => undefined);
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <LocaleProvider>
