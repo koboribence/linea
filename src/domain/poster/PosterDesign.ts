@@ -40,7 +40,7 @@ export interface PosterDesign {
   photo: PhotoSettings;
   /** What fills the background behind the text */
   background: BackgroundKind;
-  /** Look of the 3D map in videos (images always use the street map) */
+  /** Look of the 3D map in videos: plain or tinted (images always use the street map) */
   mapStyle: VideoStyleId;
   /** Length of the flyover video, seconds */
   videoSeconds: number;
@@ -100,7 +100,7 @@ export class PosterDefaults {
     showElevation: true,
     showLogo: true,
     background: 'theme',
-    mapStyle: 'night',
+    mapStyle: 'neutral',
     videoSeconds: 20,
   };
 

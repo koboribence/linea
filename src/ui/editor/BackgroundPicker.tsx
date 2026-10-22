@@ -2,7 +2,6 @@ import type { BackgroundKind, PosterDesign } from '../../domain/poster/PosterDes
 import { useLocale } from '../../i18n/LocaleContext';
 import { Segmented } from '../controls/Segmented';
 import { MapView } from '../map/MapView';
-import { MapStylePicker } from './MapStylePicker';
 import { PhotoPicker } from './PhotoPicker';
 
 interface BackgroundPickerProps {
@@ -18,7 +17,7 @@ interface BackgroundPickerProps {
 
 const KINDS: BackgroundKind[] = ['theme', 'map', 'photo'];
 
-/** What sits behind the text: theme color, the 3D satellite map, or the user's photo. */
+/** What sits behind the text: theme color, the 3D street map, or the user's photo. */
 export function BackgroundPicker(props: BackgroundPickerProps) {
   const { design, update, hasRoute } = props;
   const { i18n } = useLocale();
@@ -41,7 +40,6 @@ export function BackgroundPicker(props: BackgroundPickerProps) {
 
       {design.background === 'map' && (
         <>
-          <MapStylePicker design={design} update={update} />
           {props.mapLoading && (
             <p className="field__hint" role="status">
               {i18n.t('map.loading')}

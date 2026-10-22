@@ -1,9 +1,9 @@
-import type { StyleSpecification } from 'maplibre-gl';
+import type { LayerSpecification, StyleSpecification } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
 import { FlyoverPath } from '../src/domain/map/FlyoverPath';
 import { LiveStats } from '../src/domain/map/LiveStats';
 import { MapStyles } from '../src/domain/map/MapStyles';
-import { SunPosition } from '../src/domain/map/SunPosition';
+import { Color } from '../src/domain/poster/Color';
 import { PrivacyZone } from '../src/domain/route/PrivacyZone';
 import { RouteShape } from '../src/domain/route/RouteShape';
 import { StatsCalculator } from '../src/domain/stats/StatsCalculator';
@@ -23,12 +23,12 @@ describe('geo helpers', () => {
 });
 
 describe('FlyoverPath', () => {
-  it('starts high above the whole route, flies close, and ends with the route complete', () => {
+  it('starts above the whole route, flies closer, and ends with the route complete', () => {
     const intro = path.shotAt(0);
     const follow = path.shotAt(0.5);
     const end = path.shotAt(1);
     expect(intro.progress).toBe(0);
-    expect(intro.distance).toBeGreaterThan(follow.distance * 2);
+    expect(intro.distance).toBeGreaterThan(follow.distance * 1.2);
     expect(follow.progress).toBeGreaterThan(0.2);
     expect(follow.progress).toBeLessThan(0.8);
     expect(end.progress).toBe(1);
@@ -46,10 +46,9 @@ describe('FlyoverPath', () => {
     }
   });
 
-  it('keeps the chase camera close enough for the hills to show', () => {
-    const distance = path.shotAt(0.5).distance;
-    expect(distance).toBeGreaterThanOrEqual(450);
-    expect(distance).toBeLessThanOrEqual(1200);
+  it('follows from a bit closer than the still image shows the whole route', () => {
+    const still = path.overview(FlyoverPath.STILL_PITCH, 0).distance;
+    expect(path.shotAt(0.5).distance / still).toBeCloseTo(1 / 1.18, 2);
   });
 
   it('draws the route up to the current point, with coloring values alongside', () => {
@@ -61,7 +60,7 @@ describe('FlyoverPath', () => {
 
 describe('LiveStats', () => {
   const stats = new StatsCalculator().calculate(ride);
-  const live = new LiveStats(route.geo, path, ride.startTime?.getTime());
+  const live = new LiveStats(route.geo, path);
 
   it('counts distance and time up along the route, never past the final value', () => {
     let previous = 0;
@@ -72,8 +71,14 @@ describe('LiveStats', () => {
       expect(now.elapsedTime!).toBeLessThanOrEqual(stats.elapsedTime!);
       previous = now.distance!;
     }
-    // The privacy zone hides the first 200 m, which still counts as covered distance
-    expect(live.snapshot(0, stats).distance).toBeGreaterThanOrEqual(190);
+    // Counters start from zero even though a privacy zone hides the first 200 m
+    const start = live.snapshot(0, stats);
+    expect([start.distance, start.elapsedTime, start.movingTime, start.elevationGain]).toEqual([
+      0, 0, 0, 0,
+    ]);
+    const end = live.snapshot(1, stats);
+    expect(end.distance).toBeCloseTo(stats.distance!, 6);
+    expect(end.elapsedTime).toBeCloseTo(stats.elapsedTime!, 6);
     expect(live.snapshot(0.5, stats).avgPower).toBe(stats.avgPower);
   });
 });
@@ -88,13 +93,14 @@ describe('MapStyles', () => {
       { id: 'building', type: 'fill', source: 'x', 'source-layer': 'building' },
       { id: 'highway_minor', type: 'line', source: 'x', paint: { 'line-color': '#181818' } },
       { id: 'highway_name_other', type: 'symbol', source: 'x' },
-      { id: 'place_city', type: 'symbol', source: 'x' },
+      { id: 'place_city', type: 'symbol', source: 'x', layout: { 'text-size': 10 } },
     ],
   };
-  const look = MapStyles.look(route.geo, ride.startTime);
+  const look = MapStyles.look(route.geo);
+  const streets = MapStyles.palette('streets', 'dark');
 
   it('keeps the street map for images, with terrain and shading, and drops label clutter', () => {
-    const style = MapStyles.build('streets', base, look);
+    const style = MapStyles.build('streets', base, look, streets);
     const ids = style.layers.map((l) => l.id);
     expect(style.terrain).toEqual({ source: 'terrain', exaggeration: look.exaggeration });
     expect(ids).toEqual([
@@ -105,10 +111,35 @@ describe('MapStyles', () => {
       'highway_minor',
       'place_city',
     ]);
+    // Images keep the base style's own street colors
+    const road = style.layers.find((l) => l.id === 'highway_minor');
+    expect(road?.type === 'line' && road.paint?.['line-color']).toBe('#181818');
   });
 
-  it('gives videos lighter streets and 3D buildings', () => {
-    const style = MapStyles.build('night', base, look);
+  it('enlarges town names, also on zoom curves', () => {
+    const curve: LayerSpecification = {
+      id: 'label_city',
+      type: 'symbol',
+      source: 'x',
+      layout: { 'text-size': ['interpolate', ['linear'], ['zoom'], 8, 10, 14, 20] },
+    };
+    const style = MapStyles.build(
+      'streets',
+      { ...base, layers: [...base.layers, curve] },
+      look,
+      streets,
+    );
+    const size = (id: string) => {
+      const layer = style.layers.find((l) => l.id === id);
+      return layer?.type === 'symbol' ? layer.layout?.['text-size'] : undefined;
+    };
+    expect(size('place_city')).toBeCloseTo(14);
+    expect(size('label_city')).toEqual(['interpolate', ['linear'], ['zoom'], 8, 14, 14, 28]);
+  });
+
+  it('gives videos streets and 3D buildings in the palette colors', () => {
+    const palette = MapStyles.palette('flyover', 'dark');
+    const style = MapStyles.build('flyover', base, look, palette);
     const ids = style.layers.map((l) => l.id);
     expect(ids).toEqual([
       'background',
@@ -118,31 +149,37 @@ describe('MapStyles', () => {
       'highway_minor',
       'place_city',
     ]);
-    expect(style.layers.find((l) => l.id === 'building-3d')?.type).toBe('fill-extrusion');
+    const building = style.layers.find((l) => l.id === 'building-3d');
+    expect(building?.type === 'fill-extrusion' && building.paint?.['fill-extrusion-color']).toBe(
+      palette.building,
+    );
     const road = style.layers.find((l) => l.id === 'highway_minor');
-    expect(road?.type === 'line' && road.paint?.['line-color']).not.toBe('#181818');
+    expect(road?.type === 'line' && road.paint?.['line-color']).toBe(palette.road);
   });
 
-  it('adds the elevation colors under the shading on the neon map', () => {
-    const ids = MapStyles.build('neon', base, look).layers.map((l) => l.id);
-    expect(ids).toContain('relief');
-    expect(ids.indexOf('relief')).toBeLessThan(ids.indexOf('shading'));
+  it('follows the background: a dark map for dark colors, a light one for light colors', () => {
+    expect(MapStyles.tone('#0e0f12')).toBe('dark');
+    expect(MapStyles.tone('#f5f5f0')).toBe('light');
+    const dark = Color.parse(MapStyles.palette('flyover', 'dark').land);
+    const light = Color.parse(MapStyles.palette('flyover', 'light').land);
+    expect(light.luminance).toBeGreaterThan(dark.luminance);
   });
 
-  it('lights the dawn map from the sun, with a moonlight fallback at night', () => {
-    // Budapest, summer noon: sun high in the south
-    const noon = SunPosition.at(new Date('2024-06-21T11:00:00Z'), 47.5, 19.05);
-    expect(noon.azimuth).toBeGreaterThan(160);
-    expect(noon.azimuth).toBeLessThan(200);
-    expect(noon.altitude).toBeGreaterThan(60);
-    // Sunrise side in the morning
-    const morning = SunPosition.at(new Date('2024-06-21T04:30:00Z'), 47.5, 19.05);
-    expect(morning.azimuth).toBeGreaterThan(50);
-    expect(morning.azimuth).toBeLessThan(100);
+  it('tints the plain look slightly with the accent color', () => {
+    const plain = MapStyles.palette('flyover', 'dark', 'neutral', '#ff0000');
+    const tinted = MapStyles.palette('flyover', 'dark', 'tinted', '#ff0000');
+    expect(plain).toEqual(MapStyles.palette('flyover', 'dark', 'neutral', '#00ff00'));
+    const red = (hex: string) => parseInt(hex.slice(1, 3), 16);
+    expect(red(tinted.road)).toBeGreaterThan(red(plain.road));
+    // Still a dark map
+    expect(Color.parse(tinted.building).isDark).toBe(true);
+  });
 
-    expect(MapStyles.lighting(noon).altitude).toBe(55);
-    const midnight = SunPosition.at(new Date('2024-06-21T22:00:00Z'), 47.5, 19.05);
-    expect(MapStyles.lighting(midnight)).toEqual({ direction: 315, altitude: 30 });
+  it('names the most contrasting map color for text: brightest when dark, darkest when light', () => {
+    const dark = MapStyles.contrast('dark', MapStyles.palette('flyover', 'dark'));
+    const light = MapStyles.contrast('light', MapStyles.palette('flyover', 'light'));
+    expect(Color.parse(dark.extreme).luminance).toBeGreaterThan(Color.parse(dark.land).luminance);
+    expect(Color.parse(light.extreme).luminance).toBeLessThan(Color.parse(light.land).luminance);
   });
 
   it('lifts flat terrain more than mountains', () => {

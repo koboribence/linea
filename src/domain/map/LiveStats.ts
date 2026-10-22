@@ -2,56 +2,64 @@ import type { GeoRoute } from '../route/RouteShape';
 import type { ActivityStats } from '../stats/ActivityStats';
 import type { FlyoverPath } from './FlyoverPath';
 
-export interface LiveValues {
-  /** Meters from the activity start (including the hidden privacy zone) */
+/** How far along the shown route a moment of the flyover is, 0…1. */
+export interface LiveShares {
+  /** Share of the route's distance */
   distance: number;
-  /** Seconds since the activity started; undefined without timestamps */
-  elapsed?: number;
+  /** Share of the route's time; the distance share where timestamps are missing */
+  time: number;
 }
 
-/** Distance and time "so far" at a point of the flyover, for counters that tick up in the video. */
+/**
+ * Stats "so far" at a point of the flyover, for counters that tick up in the video.
+ * Every counter runs from 0 at the start of the shown route to its final value at its end,
+ * even when a privacy zone hides the first meters or the clock started before the first point.
+ */
 export class LiveStats {
   constructor(
     private readonly route: GeoRoute,
     private readonly path: FlyoverPath,
-    /** Activity start, epoch ms */
-    private readonly startTime: number | undefined,
   ) {}
 
-  at(progress: number): LiveValues {
+  at(progress: number): LiveShares {
     const { index, fraction } = this.path.locate(progress);
-    const { distances, times, startDistance } = this.route;
+    const { distances, times } = this.route;
     const next = Math.min(index + 1, distances.length - 1);
-    const along = distances[index]! + (distances[next]! - distances[index]!) * fraction;
+    const lerp = (a: number, b: number) => a + (b - a) * fraction;
 
+    const length = distances.at(-1) ?? 0;
+    const distance = length > 0 ? lerp(distances[index]!, distances[next]!) / length : progress;
+
+    const first = times[0];
+    const last = times.at(-1);
     const t0 = times[index];
     const t1 = times[next] ?? t0;
-    const elapsed =
-      this.startTime !== undefined && t0 !== undefined && t1 !== undefined
-        ? Math.max(0, (t0 + (t1 - t0) * fraction - this.startTime) / 1000)
-        : undefined;
+    const timed = first !== undefined && last !== undefined && last > first && t0 !== undefined;
+    const time = timed ? (lerp(t0, t1 ?? t0) - first) / (last - first) : distance;
 
-    return { distance: startDistance + along, elapsed };
+    return { distance: clamp(distance), time: clamp(time) };
   }
 
   /**
-   * The final stats as they stood at `progress`: distance and time count up, totals like
-   * elevation gain grow with the distance covered, averages stay as they are.
+   * The final stats as they stood at `progress`: distance, times and totals like elevation
+   * gain count up, averages stay as they are (so the layout doesn't jump).
    */
   snapshot(progress: number, final: ActivityStats): ActivityStats {
-    const live = this.at(progress);
-    const share = final.distance ? Math.min(1, live.distance / final.distance) : progress;
-    const grow = (value: number | undefined) => (value === undefined ? undefined : value * share);
-    const capped = (value: number | undefined, max: number | undefined) =>
-      value === undefined || max === undefined ? grow(max) : Math.min(value, max);
+    const share = this.at(progress);
+    const by = (value: number | undefined, part: number) =>
+      value === undefined ? undefined : value * part;
     return {
       ...final,
-      distance: capped(live.distance, final.distance),
-      elapsedTime: capped(live.elapsed, final.elapsedTime),
-      movingTime: grow(final.movingTime),
-      elevationGain: grow(final.elevationGain),
-      elevationLoss: grow(final.elevationLoss),
-      calories: grow(final.calories),
+      distance: by(final.distance, share.distance),
+      elapsedTime: by(final.elapsedTime, share.time),
+      movingTime: by(final.movingTime, share.time),
+      elevationGain: by(final.elevationGain, share.distance),
+      elevationLoss: by(final.elevationLoss, share.distance),
+      calories: by(final.calories, share.time),
     };
   }
+}
+
+function clamp(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }

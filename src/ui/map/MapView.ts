@@ -1,10 +1,12 @@
 import type { LngLat, Map as MapLibreMap, StyleSpecification } from 'maplibre-gl';
 import type { CameraShot } from '../../domain/map/FlyoverPath';
 import {
-  DARK_STYLE_URL,
+  BASE_STYLE_URLS,
   MapStyles,
+  type MapKind,
   type MapLook,
-  type MapStyleId,
+  type MapPalette,
+  type MapTone,
 } from '../../domain/map/MapStyles';
 import { offset } from '../../domain/stats/geo';
 
@@ -12,9 +14,13 @@ export interface MapViewOptions {
   /** Output size in pixels; the map renders at exactly this resolution */
   width: number;
   height: number;
-  style: MapStyleId;
-  /** Light, relief and elevation range of the route's area */
+  kind: MapKind;
+  /** Dark or light base map */
+  tone: MapTone;
+  /** Terrain relief of the route's area */
   look: MapLook;
+  /** Starting colors; recolor() changes them later */
+  palette: MapPalette;
   /** Where the camera starts, [lon, lat] */
   center: [number, number];
 }
@@ -25,17 +31,26 @@ const MIN_CLEARANCE = 80;
 /** Route points closer than this in front of the camera (or behind it) aren't drawn, meters. */
 const MIN_FORWARD = 30;
 const METERS_PER_DEGREE = 111_320;
+/**
+ * Tiles kept in memory per source for flyovers: enough for the whole flight, so playback after
+ * warmUp() never waits for the network. (MapLibre's default only covers about one view.)
+ */
+const FLYOVER_TILE_CACHE = 1200;
 
-/** Downloaded once per page; every map after that starts from memory. */
-let darkBase: Promise<StyleSpecification> | undefined;
-function loadBase(): Promise<StyleSpecification> {
-  darkBase ??= fetch(DARK_STYLE_URL).then((r) => {
-    if (!r.ok) throw new Error(`Map style: HTTP ${r.status}`);
-    return r.json() as Promise<StyleSpecification>;
-  });
-  // A failed download may be retried by the next map
-  darkBase.catch(() => (darkBase = undefined));
-  return darkBase;
+/** Base styles, downloaded once per page; every map after that starts from memory. */
+const bases = new Map<MapTone, Promise<StyleSpecification>>();
+function loadBase(tone: MapTone): Promise<StyleSpecification> {
+  let base = bases.get(tone);
+  if (!base) {
+    base = fetch(BASE_STYLE_URLS[tone]).then((r) => {
+      if (!r.ok) throw new Error(`Map style: HTTP ${r.status}`);
+      return r.json() as Promise<StyleSpecification>;
+    });
+    // A failed download may be retried by the next map
+    base.catch(() => bases.delete(tone));
+    bases.set(tone, base);
+  }
+  return base;
 }
 
 /**
@@ -46,6 +61,8 @@ function loadBase(): Promise<StyleSpecification> {
 export class MapView {
   /** Where the camera stands and looks, to leave out route points behind it */
   private camera?: { lon: number; lat: number; bearing: number };
+  /** Counts recolors, to name the marker layer that makes MapLibre redraw the terrain */
+  private colorRevision = 0;
 
   private constructor(
     private readonly map: MapLibreMap,
@@ -57,7 +74,8 @@ export class MapView {
 
   /** Starts downloading the map code and base style early, e.g. when a map option is hovered. */
   static preload(): void {
-    void loadBase().catch(() => undefined);
+    // Both base styles are small; the poster's colors decide later which one is used
+    for (const tone of ['dark', 'light'] as const) void loadBase(tone).catch(() => undefined);
     void import('maplibre-gl');
   }
 
@@ -66,7 +84,7 @@ export class MapView {
       import('maplibre-gl'),
       // Bundlers move MapLibre around, so tell it where its background worker file ended up
       import('maplibre-gl/dist/maplibre-gl-worker.mjs?url'),
-      loadBase(),
+      loadBase(options.tone),
       import('maplibre-gl/dist/maplibre-gl.css'),
     ]);
     setWorkerUrl(worker.default);
@@ -79,7 +97,7 @@ export class MapView {
 
     const map = new Map({
       container,
-      style: MapStyles.build(options.style, base, options.look),
+      style: MapStyles.build(options.kind, base, options.look, options.palette),
       center: options.center,
       zoom: 12,
       interactive: false,
@@ -87,6 +105,11 @@ export class MapView {
       pixelRatio: 1, // the container already has the output size
       maxPitch: 85,
       fadeDuration: 0,
+      // MapLibre caps its cache at (tiles in one view × zoom levels); room for many views
+      ...(options.kind === 'flyover' && {
+        maxTileCacheSize: FLYOVER_TILE_CACHE,
+        maxTileCacheZoomLevels: 40,
+      }),
       // Needed to copy the map into the exported image after it rendered
       canvasContextAttributes: { preserveDrawingBuffer: true, antialias: true },
     });
@@ -132,6 +155,45 @@ export class MapView {
         ground,
       ),
     );
+  }
+
+  /** New colors for streets, buildings, relief and sky, without reloading anything. */
+  recolor(palette: MapPalette): void {
+    for (const [layer, property, value] of MapStyles.paints(palette)) {
+      if (this.map.getLayer(layer)) this.map.setPaintProperty(layer, property, value);
+    }
+    this.map.setSky(MapStyles.sky(palette));
+
+    // Layers draped on 3D terrain are cached per tile and only redrawn when the tiles or the
+    // list of layers change, not the colors: swapping an empty marker layer forces the redraw
+    const previous = `palette-${this.colorRevision}`;
+    if (this.map.getLayer(previous)) this.map.removeLayer(previous);
+    this.colorRevision++;
+    this.map.addLayer(
+      {
+        id: `palette-${this.colorRevision}`,
+        type: 'background',
+        paint: { 'background-opacity': 0 },
+      },
+      this.map.getLayer('background') ? 'background' : undefined,
+    );
+  }
+
+  /**
+   * Flies through the given shots and waits at each until its tiles are in, so a later
+   * playback finds the whole flight in the tile cache instead of loading on the way.
+   */
+  async warmUp(
+    shots: CameraShot[],
+    onProgress: (share: number) => void,
+    signal: AbortSignal,
+  ): Promise<void> {
+    for (const [i, shot] of shots.entries()) {
+      signal.throwIfAborted();
+      this.setCamera(shot);
+      await this.settle(8000);
+      onProgress((i + 1) / shots.length);
+    }
   }
 
   /** Moves the map's focal point into the given band of the image (top/bottom insets, pixels). */

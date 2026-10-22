@@ -6,6 +6,7 @@ import { Color } from '../src/domain/poster/Color';
 import { PosterDefaults, type PosterDesign } from '../src/domain/poster/PosterDesign';
 import { PosterSceneBuilder } from '../src/domain/poster/PosterScene';
 import { PosterTheme } from '../src/domain/poster/PosterTheme';
+import { Readability } from '../src/domain/poster/Readability';
 import { I18n } from '../src/i18n/I18n';
 import { loadFixture } from './helpers';
 
@@ -94,6 +95,58 @@ describe('PosterTheme', () => {
 
   it('mixes colors', () => {
     expect(Color.parse('#000').mix(Color.parse('#ffffff'), 0.5).toHex()).toBe('#808080');
+  });
+});
+
+describe('Readability (WCAG 2.2 AA)', () => {
+  const ratio = (a: string, b: string) => Color.parse(a).contrast(Color.parse(b));
+
+  it('measures contrast like WCAG', () => {
+    expect(ratio('#000000', '#ffffff')).toBeCloseTo(21, 1);
+    expect(ratio('#777777', '#ffffff')).toBeCloseTo(4.48, 1);
+  });
+
+  /** Every text color of a theme against both ends of its background gradient. */
+  const check = (colors: ReturnType<typeof PosterTheme.resolve>) => {
+    for (const bg of colors.background) {
+      expect(ratio(colors.text, bg)).toBeGreaterThanOrEqual(Readability.TEXT);
+      expect(ratio(colors.muted, bg)).toBeGreaterThanOrEqual(Readability.TEXT);
+      expect(ratio(colors.accentText, bg)).toBeGreaterThanOrEqual(Readability.TEXT);
+    }
+  };
+
+  it('keeps every preset theme readable', () => {
+    for (const id of PosterTheme.IDS) check(PosterTheme.resolve(id));
+  });
+
+  it('keeps any custom background and accent readable', () => {
+    // A fixed pseudo-random spread of colors, mid-greys included
+    let seed = 7;
+    const next = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const hex = () =>
+      '#' +
+      [0, 0, 0]
+        .map(() =>
+          Math.floor(next() * 256)
+            .toString(16)
+            .padStart(2, '0'),
+        )
+        .join('');
+    for (let i = 0; i < 300; i++) {
+      check(PosterTheme.resolve('volt', { background: hex(), accent: hex() }));
+    }
+    check(PosterTheme.resolve('volt', { background: '#777777', accent: '#808080' }));
+  });
+
+  it('finds how opaque a cover must be for text over a map', () => {
+    const white = Color.parse('#ffffff');
+    const bright = Color.parse('#c0c0c0');
+    const black = Color.parse('#000000');
+    const alpha = Readability.coverOpacity(white, bright, black, Readability.TEXT);
+    expect(alpha).toBeGreaterThan(0);
+    expect(white.contrast(bright.mix(black, alpha))).toBeGreaterThanOrEqual(Readability.TEXT);
+    expect(white.contrast(bright.mix(black, alpha - 0.02))).toBeLessThan(Readability.TEXT);
+    expect(Readability.coverOpacity(white, black, black, Readability.TEXT)).toBe(0);
   });
 });
 

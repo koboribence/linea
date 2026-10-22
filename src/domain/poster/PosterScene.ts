@@ -4,7 +4,7 @@ import { UnitFormatter } from '../format/UnitFormatter';
 import type { ElevationProfile } from '../route/ElevationProfile';
 import type { RouteShape, ScreenPoint } from '../route/RouteShape';
 import type { MessageKey } from '../../i18n/messages/hu';
-import { MapStyles } from '../map/MapStyles';
+import { MapStyles, type MapContrast, type MapKind } from '../map/MapStyles';
 import type { PhotoSettings } from './PhotoPlacement';
 import { PosterFonts, type PosterFont } from './PosterFont';
 import type { PosterDesign } from './PosterDesign';
@@ -51,6 +51,8 @@ export interface PosterScene {
     /** False when the route's start is out of view (no start ring then) */
     showStart?: boolean;
     attribution: string[];
+    /** Map colors that text and the route must stand out from */
+    contrast: MapContrast;
   };
   /** Stats block opacity, for fading it in on video (default 1) */
   statsOpacity?: number;
@@ -68,7 +70,7 @@ export interface SceneInput {
   /** The user's background photo, if any */
   photo?: PhotoImage;
   /** Use the 3D map as background: the rendered still (none for video) and the projected route */
-  map?: { image?: PhotoImage; route?: ScreenPoint[]; showStart?: boolean };
+  map?: { kind: MapKind; image?: PhotoImage; route?: ScreenPoint[]; showStart?: boolean };
   brandName: string;
 }
 
@@ -84,16 +86,21 @@ export class PosterSceneBuilder {
     const size = POSTER_FORMATS[design.format];
     const byId = new Map(statItems.map((item) => [item.id, item]));
 
+    const colors = PosterTheme.resolve(design.themeId, {
+      background: design.customBackground,
+      accent: design.customAccent,
+    });
     return {
       ...size,
-      colors: PosterTheme.resolve(design.themeId, {
-        background: design.customBackground,
-        accent: design.customAccent,
-      }),
+      colors,
       font: PosterFonts.PRESETS[design.fontId],
       // A photo fills the background, so the image can't be a transparent sticker at the same time
       transparent: design.transparent && design.background === 'theme' && !photo && !map,
-      map: map && { ...map, attribution: MapStyles.attribution() },
+      map: map && {
+        ...map,
+        attribution: MapStyles.attribution(),
+        contrast: this.mapContrast(map.kind, design, colors),
+      },
       photo: photo && { image: photo, settings: design.photo },
       eyebrow: this.eyebrow(activity, design),
       title: design.title?.trim() || this.autoTitle(activity),
@@ -121,6 +128,12 @@ export class PosterSceneBuilder {
   }
 
   /** The small line above the title: date and/or sport, each switchable. Undefined when empty. */
+  /** The colors of the map behind the poster, dark or light like its background. */
+  private mapContrast(kind: MapKind, design: PosterDesign, colors: ThemeColors): MapContrast {
+    const tone = MapStyles.tone(colors.background[0]);
+    return MapStyles.contrast(tone, MapStyles.palette(kind, tone, design.mapStyle, colors.accent));
+  }
+
   private eyebrow(activity: Activity, design: PosterDesign): string | undefined {
     const parts = [
       design.showDate ? this.date(activity, design.manualDate) : undefined,

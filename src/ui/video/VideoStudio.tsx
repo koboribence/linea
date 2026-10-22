@@ -37,12 +37,19 @@ export function VideoStudio({ input }: { input: FlyoverInput }) {
           className="video-stage"
           style={{ width: video.width, height: video.height, transform: `scale(${scale})` }}
         >
-          <div ref={hostRef} className="video-stage__map" />
+          {/* Hidden while the camera flies around loading the map ahead of playback */}
+          <div
+            ref={hostRef}
+            className="video-stage__map"
+            style={{ opacity: video.ready ? 1 : 0 }}
+          />
           <canvas ref={overlayRef} className="video-stage__overlay" />
         </div>
         {!video.ready && !video.mapFailed && (
           <p className="frame-status" role="status">
-            {i18n.t('map.loading')}
+            {video.preparing === undefined
+              ? i18n.t('map.loading')
+              : i18n.t('video.preparing', { percent: Math.round(video.preparing * 100) })}
           </p>
         )}
         {video.mapFailed && (

@@ -4,6 +4,7 @@ import { Graphemes } from '../format/Graphemes';
 import { Color } from './Color';
 import { PhotoPlacement } from './PhotoPlacement';
 import { PosterFonts, type FontFace, type PosterFont } from './PosterFont';
+import { Readability } from './Readability';
 import type { PhotoImage, PosterScene, PosterStat } from './PosterScene';
 
 const BASE_WIDTH = 1080;
@@ -102,7 +103,7 @@ export class PosterRenderer {
   private draw(): void {
     const { scene } = this;
     const layout = this.layout();
-    this.drawBackground(layout.middle);
+    this.drawBackground(layout);
     this.drawHeader(layout.title);
     // On a map background the map has already drawn the route
     if (scene.map?.route) this.drawRoutePoints(scene.map.route, scene.map.showStart !== false);
@@ -228,11 +229,12 @@ export class PosterRenderer {
 
   // ── Drawing ───────────────────────────────────────────────────────────
 
-  private drawBackground(middle: Box): void {
+  private drawBackground(layout: Layout): void {
     const { ctx, scene } = this;
+    const { middle } = layout;
     ctx.clearRect(0, 0, scene.width, scene.height);
     if (scene.transparent) return;
-    if (scene.map) return this.drawMapBackdrop(scene.map.image);
+    if (scene.map) return this.drawMapBackdrop(scene.map.image, layout);
 
     const [from, to] = scene.colors.background;
     const gradient = ctx.createLinearGradient(0, 0, scene.width, scene.height);
@@ -274,7 +276,7 @@ export class PosterRenderer {
     let y = this.padTop;
     if (scene.eyebrow) {
       this.setFont(PosterFonts.css(this.font.label, 26 * u), 3 * u);
-      ctx.fillStyle = scene.colors.accent;
+      ctx.fillStyle = scene.colors.accentText;
       ctx.textBaseline = 'top';
       ctx.fillText(this.ellipsize(scene.eyebrow.toLocaleUpperCase(), maxWidth), pad, y);
       y += 26 * u + 22 * u;
@@ -313,6 +315,17 @@ export class PosterRenderer {
     ctx.lineJoin = 'round';
     ctx.lineWidth = width;
 
+    // On a map the line must stand out (3:1); where its colors are too close to the map's,
+    // a black or white casing underneath keeps it visible
+    const casing = scene.map && this.routeCasing(points[0]!.value !== undefined);
+    if (casing) {
+      ctx.strokeStyle = casing;
+      ctx.lineWidth = width + 6 * u;
+      this.tracePath(points);
+      ctx.stroke();
+      ctx.lineWidth = width;
+    }
+
     // Pass 1: the whole line in the accent color, glowing on dark themes and always on maps
     if (scene.colors.glow || scene.map) {
       ctx.shadowColor = this.accent.toRgba(0.65);
@@ -339,6 +352,20 @@ export class PosterRenderer {
     }
 
     this.drawMarkers(showStart ? points[0] : undefined, points.at(-1)!, width);
+  }
+
+  /** A casing color when the route's colors don't reach 3:1 against the map, else undefined. */
+  private routeCasing(gradient: boolean): string | undefined {
+    const { colors, map } = this.scene;
+    const lineColors = [this.accent, ...(gradient ? [Color.parse(colors.accentSoft)] : [])];
+    const mapColors = [map!.contrast.land, map!.contrast.extreme].map((hex) => Color.parse(hex));
+    const weakest = Math.min(
+      ...lineColors.map((line) => Readability.worstContrast(line, mapColors)),
+    );
+    if (weakest >= Readability.GRAPHICS) return undefined;
+    const white = Color.parse('#ffffff');
+    const black = Color.parse('#000000');
+    return Readability.textColorFor(lineColors, white, black).toHex();
   }
 
   /** Start: open ring, finish: filled dot (same as the logo). */
@@ -394,21 +421,68 @@ export class PosterRenderer {
 
   /**
    * Map background: the rendered map (or nothing, when video frames put the live map under it),
-   * with the theme color fading in at the top and bottom so the text stays readable.
+   * with the theme color fading in at the top and bottom. Behind text the cover is at least as
+   * opaque as WCAG AA contrast needs over the map's most contrasting color.
    */
-  private drawMapBackdrop(image: PhotoImage | undefined): void {
-    const { ctx, scene } = this;
+  private drawMapBackdrop(image: PhotoImage | undefined, layout: Layout): void {
+    const { ctx, scene, u } = this;
     if (image) ctx.drawImage(image.source, 0, 0, scene.width, scene.height);
+    const { top, bottom } = this.coverOpacity(layout);
     const bg = Color.parse(scene.colors.background[0]);
-    const scrim = (from: number, to: number, alphaFrom: number, alphaTo: number) => {
-      const gradient = ctx.createLinearGradient(0, from, 0, to);
-      gradient.addColorStop(0, bg.toRgba(alphaFrom));
-      gradient.addColorStop(1, bg.toRgba(alphaTo));
+    const fade = scene.height * 0.1;
+    const scrim = (stops: [number, number][]) => {
+      const gradient = ctx.createLinearGradient(0, stops[0]![0], 0, stops.at(-1)![0]);
+      const span = stops.at(-1)![0] - stops[0]![0];
+      for (const [y, alpha] of stops) {
+        gradient.addColorStop((y - stops[0]![0]) / span, bg.toRgba(alpha));
+      }
       ctx.fillStyle = gradient;
-      ctx.fillRect(0, Math.min(from, to), scene.width, Math.abs(to - from));
+      ctx.fillRect(0, stops[0]![0], scene.width, span);
     };
-    scrim(0, scene.height * 0.4, 0.88, 0);
-    scrim(scene.height * 0.52, scene.height, 0, 0.92);
+
+    const headerEnd = layout.title.bottom + 16 * u;
+    scrim([
+      [0, Math.max(0.88, top)],
+      [headerEnd, top],
+      [headerEnd + fade, 0],
+    ]);
+    const footerStart = this.footerTop(layout) - 16 * u;
+    scrim([
+      [footerStart - fade, 0],
+      [footerStart, bottom],
+      [scene.height, Math.max(0.92, bottom)],
+    ]);
+  }
+
+  /** Where the text (or the elevation profile) at the bottom begins. */
+  private footerTop(layout: Layout): number {
+    const { u, scene } = this;
+    if (layout.elevation) return layout.elevation.y;
+    if (layout.divider !== undefined) return layout.divider;
+    return scene.logo ? this.logoBaseline() - 60 * u : this.logoBaseline() + 20 * u;
+  }
+
+  /**
+   * Opacity the theme-colored cover needs behind the header and the footer, so that over the
+   * map's most contrasting color small text reaches 4.5:1, big text and the profile 3:1.
+   */
+  private coverOpacity(layout: Layout): { top: number; bottom: number } {
+    const { scene } = this;
+    const { colors } = scene;
+    const under = Color.parse(scene.map!.contrast.extreme);
+    const cover = Color.parse(colors.background[0]);
+    const need = (hex: string, ratio: number) =>
+      Readability.coverOpacity(Color.parse(hex), under, cover, ratio);
+    const top = Math.max(
+      need(colors.text, Readability.LARGE_TEXT),
+      scene.eyebrow ? need(colors.accentText, Readability.TEXT) : 0,
+    );
+    const bottom = Math.max(
+      need(colors.text, Readability.LARGE_TEXT),
+      need(colors.muted, Readability.TEXT),
+      layout.elevation ? need(colors.accent, Readability.GRAPHICS) : 0,
+    );
+    return { top, bottom };
   }
 
   /** Data credits the map licenses require, small but legible, at the very bottom. */
@@ -416,7 +490,7 @@ export class PosterRenderer {
     const { ctx, u, scene } = this;
     this.noShadow();
     this.setFont(PosterFonts.css({ family: 'Inter, system-ui, sans-serif', weight: 500 }, 14 * u));
-    ctx.fillStyle = Color.parse(scene.colors.text).toRgba(0.6);
+    ctx.fillStyle = scene.colors.muted;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     const bottom = this.logoBaseline() + 56 * u;

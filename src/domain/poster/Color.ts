@@ -30,6 +30,12 @@ export class Color {
     return 0.2126 * channel(this.r) + 0.7152 * channel(this.g) + 0.0722 * channel(this.b);
   }
 
+  /** WCAG contrast ratio with another color, 1 (none) … 21 (black on white) */
+  contrast(other: Color): number {
+    const [light, dark] = [this.luminance, other.luminance].sort((x, y) => y - x);
+    return (light! + 0.05) / (dark! + 0.05);
+  }
+
   get isDark(): boolean {
     return this.luminance < 0.4;
   }

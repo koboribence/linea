@@ -1,4 +1,5 @@
 import { Color } from './Color';
+import { Readability } from './Readability';
 
 export type ThemeId = 'volt' | 'chalk' | 'ocean' | 'dusk' | 'forest' | 'graphite';
 
@@ -9,11 +10,20 @@ export interface ThemeColors {
   muted: string;
   /** Route, highlights; the "fast / high" end of gradients */
   accent: string;
+  /** The accent where it colors small text: adjusted to stay readable (WCAG 4.5:1) */
+  accentText: string;
   /** The "slow / low" end of route gradients */
   accentSoft: string;
   /** Soft light around the route; looks good on dark backgrounds only */
   glow: boolean;
 }
+
+type PresetColors = Omit<ThemeColors, 'accentText'>;
+
+const LIGHT_TEXT = Color.parse('#f5f5f0');
+const DARK_TEXT = Color.parse('#0e0f12');
+const WHITE = Color.parse('#ffffff');
+const BLACK = Color.parse('#000000');
 
 export interface CustomColors {
   background?: string;
@@ -22,7 +32,7 @@ export interface CustomColors {
 
 /** Ready-made color sets plus user overrides. */
 export class PosterTheme {
-  static readonly PRESETS: Record<ThemeId, ThemeColors> = {
+  static readonly PRESETS: Record<ThemeId, PresetColors> = {
     volt: {
       background: ['#0e0f12', '#1b1e24'],
       text: '#f5f5f0',
@@ -75,18 +85,29 @@ export class PosterTheme {
 
   static readonly IDS = Object.keys(PosterTheme.PRESETS) as ThemeId[];
 
-  /** Preset colors with the user's own background and/or accent applied on top. */
+  /**
+   * Preset colors with the user's own background and/or accent applied on top. Text colors
+   * always meet WCAG AA contrast on the background, whatever the user picks.
+   */
   static resolve(id: ThemeId, custom: CustomColors = {}): ThemeColors {
     const preset = PosterTheme.PRESETS[id];
-    let colors: ThemeColors = { ...preset };
+    let colors: PresetColors = { ...preset };
 
     if (custom.background) {
       const bg = Color.parse(custom.background);
-      // Text color follows the background's brightness so it stays readable
-      const text = Color.parse(bg.isDark ? '#f5f5f0' : '#0e0f12');
+      // Light or dark text, whichever contrasts more; on mid-tones only pure white or black
+      // reaches 4.5:1
+      let text = Readability.textColorFor([bg], LIGHT_TEXT, DARK_TEXT);
+      if (text.contrast(bg) < Readability.TEXT) text = Readability.textColorFor([bg], WHITE, BLACK);
+      // The gradient's other end leans toward the text, unless that costs readability
+      const toward = bg.mix(text, 0.06);
+      const away = bg.mix(text === DARK_TEXT || text === BLACK ? WHITE : BLACK, 0.06);
       colors = {
         ...colors,
-        background: [bg.toHex(), bg.mix(text, 0.06).toHex()],
+        background: [
+          bg.toHex(),
+          (toward.contrast(text) >= Readability.TEXT ? toward : away).toHex(),
+        ],
         text: text.toHex(),
         muted: text.mix(bg, 0.45).toHex(),
         glow: bg.isDark,
@@ -97,6 +118,15 @@ export class PosterTheme {
       const bg = Color.parse(colors.background[0]);
       colors = { ...colors, accent: accent.toHex(), accentSoft: accent.mix(bg, 0.6).toHex() };
     }
-    return colors;
+    return PosterTheme.readable(colors);
+  }
+
+  /** Small text (labels, date line, credits) nudged toward the text color until it is readable. */
+  private static readable(colors: PresetColors): ThemeColors {
+    const backgrounds = colors.background.map((hex) => Color.parse(hex));
+    const text = Color.parse(colors.text);
+    const ensure = (hex: string) =>
+      Readability.ensure(Color.parse(hex), backgrounds, Readability.TEXT, text).toHex();
+    return { ...colors, muted: ensure(colors.muted), accentText: ensure(colors.accent) };
   }
 }

@@ -87,12 +87,17 @@ export function usePosterEditor(loaded: Activity, mode: 'image' | 'video' = 'ima
         route,
         elevation,
         photo: usePhoto ? photo : undefined,
-        map: useMap ? {} : undefined,
+        map: useMap ? { kind: 'streets' } : undefined,
         brandName: BRAND.name,
       }),
     [builder, activity, design, statItems, route, elevation, photo, usePhoto, useMap],
   );
-  const mapSnapshot = useMapSnapshot(useMap, route, baseScene, MapStyles.IMAGE, activity.startTime);
+  const mapSnapshot = useMapSnapshot(
+    useMap,
+    route,
+    baseScene,
+    MapStyles.tone(baseScene.colors.background[0]),
+  );
   const scene = useMemo(() => {
     const still = mapSnapshot.result;
     const geo = route?.geo;

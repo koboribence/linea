@@ -8,7 +8,7 @@ interface MapStylePickerProps {
   update: (changes: Partial<PosterDesign>) => void;
 }
 
-/** The three video looks: night, dawn light and neon relief. */
+/** The video looks: plain, or tinted with the accent color. Dark or light follows the colors. */
 export function MapStylePicker({ design, update }: MapStylePickerProps) {
   const { i18n } = useLocale();
   return (

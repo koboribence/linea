@@ -72,7 +72,7 @@ Három réteg, mindegyik egy dologért felel:
 | `showElevation` | Magasságprofil | `true` |
 | `showLogo` | Logó a kép alján | `true` |
 | `background` | `theme` (szín), `map` (3D térkép) vagy `photo` (fotó) | `theme` |
-| `mapStyle` | A videó térképe: `night`, `dawn` vagy `neon`, lásd [map-flyover.md](map-flyover.md). Megszűnt stílus (pl. `satellite`) mentve az alapértékre áll vissza. | `night` |
+| `mapStyle` | A videó térképe: `neutral` (alap) vagy `tinted` (témaszínnel árnyalt), lásd [map-flyover.md](map-flyover.md). Megszűnt stílus (pl. `satellite`, `night`) mentve az alapértékre áll vissza. | `neutral` |
 | `videoSeconds` | A videó hossza: 10, 20 vagy 30 mp | 20 |
 | `photo` | Háttérkép beállításai: `overlay` (0–1), `zoom` (0,5–3), `offsetX`/`offsetY` (eltolás a középponttól). Csak betöltött képnél számít | overlay 55%, középen |
 
@@ -178,19 +178,20 @@ Minden téma `ThemeColors` értékeket ad:
 | `background` | Kétszínű, átlós színátmenetes háttér. |
 | `text` | Cím és értékek. |
 | `muted` | Címkék, mértékegységek, elválasztó vonal. |
-| `accent` | Útvonal, dátumsor, a színátmenet „gyors/magas” vége. |
+| `accent` | Útvonal, a színátmenet „gyors/magas” vége. |
+| `accentText` | A dátumsor: a kiemelő szín, ha olvasható (4,5:1), különben a szövegszín felé tolva. |
 | `accentSoft` | A színátmenet „lassú/alacsony” vége. |
 | `glow` | Fényudvar az útvonal körül; csak sötét háttéren szép. |
 
 **Saját színek:**
-- **Saját háttér:** a szöveg színe a háttér fényerejétől függően automatikusan sötét vagy világos lesz, a `muted` pedig ebből keverődik.
+- **Saját háttér:** a szöveg a jobban kontrasztoló világos vagy sötét szín (középszürkén tiszta fehér vagy fekete), a `muted` ebből keverődik. A szövegszínek minden esetben megfelelnek a WCAG 2.2 AA-nak (lásd [map-flyover.md](map-flyover.md#olvashatóság-és-kontraszt-wcag-22-aa)).
 - **Saját kiemelő szín:** az `accentSoft` a kiemelő szín és a háttér keveréke.
 
 ## Háttér és mód
 
 A felület tetején „Kép | Videó” váltó van; videó csak GPS-útvonallal érhető el. Kép módban a „Háttér” szakaszban három lehetőség közül lehet választani:
 - **Szín:** a téma színátmenete.
-- **3D térkép:** sötét, vonalas utcás térkép domborzattal, rajta az útvonal. A részleteket lásd: [map-flyover.md](map-flyover.md).
+- **3D térkép:** vonalas utcás térkép domborzattal, rajta az útvonal; sötét háttérszínhez sötét, világoshoz világos. A részleteket lásd: [map-flyover.md](map-flyover.md).
 - **Fotó:** a felhasználó saját képe, lásd lent.
 
 ## Kézi dátum

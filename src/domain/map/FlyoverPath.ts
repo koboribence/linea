@@ -31,6 +31,10 @@ const MAX_TURN_STEP = 0.8;
 const FOLLOW_PITCH = 62;
 const OVERVIEW_PITCH = 38;
 const END_PITCH = 50;
+/** The chase camera is this much closer than the still image's view of the whole route. */
+const FOLLOW_ZOOM = 1.18;
+/** Opening and ending shots are at least this much further away than the chase camera. */
+const PULL_BACK = 1.25;
 /** The ending circles this far around the route while pulling back, degrees. */
 const END_ORBIT = 70;
 
@@ -42,6 +46,8 @@ const END_ORBIT = 70;
 export class FlyoverPath {
   static readonly INTRO_END = 0.12;
   static readonly OUTRO_START = 0.82;
+  /** Fixed tilt of still images (north up) */
+  static readonly STILL_PITCH = 50;
 
   private readonly total: number;
   private readonly center: [number, number];
@@ -73,8 +79,13 @@ export class FlyoverPath {
 
     this.extentWidth = haversine(this.center[1], minLon, this.center[1], maxLon);
     this.extentHeight = haversine(minLat, this.center[0], maxLat, this.center[0]);
-    this.overviewDistance = this.fitDistance(OVERVIEW_PITCH, 0, share) * 1.2;
-    this.chaseDistance = Math.max(closest, Math.min(1200, this.total * 0.03));
+    // Far enough to see the area around the route, a bit closer than the still image
+    const still = this.fitDistance(FlyoverPath.STILL_PITCH, 0, share) * 1.2;
+    this.chaseDistance = Math.max(closest, still / FOLLOW_ZOOM);
+    this.overviewDistance = Math.max(
+      this.fitDistance(OVERVIEW_PITCH, 0, share) * 1.2,
+      this.chaseDistance * PULL_BACK,
+    );
     this.headings = this.computeHeadings();
   }
 
@@ -95,6 +106,11 @@ export class FlyoverPath {
       this.endShot(),
       ease((t - OUTRO_START) / (1 - OUTRO_START)),
     );
+  }
+
+  /** `count` evenly spaced shots of the whole flight, start and end included. */
+  shots(count: number): CameraShot[] {
+    return Array.from({ length: count }, (_, i) => this.shotAt(i / (count - 1)));
   }
 
   /**
@@ -240,7 +256,10 @@ export class FlyoverPath {
     return {
       target: this.center,
       targetElevation: this.elevationAt(0.5),
-      distance: this.fitDistance(END_PITCH, this.headingAt(1) + END_ORBIT, this.share) * 1.2,
+      distance: Math.max(
+        this.fitDistance(END_PITCH, this.headingAt(1) + END_ORBIT, this.share) * 1.2,
+        this.chaseDistance * PULL_BACK,
+      ),
       bearing: this.headingAt(1) + END_ORBIT,
       pitch: END_PITCH,
       progress: 1,

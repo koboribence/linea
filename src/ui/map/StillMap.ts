@@ -1,6 +1,6 @@
 import { FlyoverPath } from '../../domain/map/FlyoverPath';
 import { MapFraming } from '../../domain/map/MapFraming';
-import { MapStyles, type MapLook, type MapStyleId } from '../../domain/map/MapStyles';
+import { MapStyles, type MapKind, type MapLook, type MapTone } from '../../domain/map/MapStyles';
 import type { PhotoImage } from '../../domain/poster/PosterScene';
 import type { GeoRoute } from '../../domain/route/RouteShape';
 import { MapView } from './MapView';
@@ -8,7 +8,8 @@ import { MapView } from './MapView';
 export interface StillRequest {
   width: number;
   height: number;
-  style: MapStyleId;
+  kind: MapKind;
+  tone: MapTone;
   look: MapLook;
   route: GeoRoute;
 }
@@ -19,8 +20,6 @@ export interface StillResult {
   points: ({ x: number; y: number } | undefined)[];
 }
 
-/** Fixed camera for still images: tilted, north up. */
-const STILL_PITCH = 50;
 /** Results kept, so switching formats back and forth is instant. */
 const CACHE_SIZE = 4;
 
@@ -37,11 +36,11 @@ export class StillMap {
   private readonly cache = new Map<string, StillResult>();
 
   /** Identifies what a render depends on: size, style, look and the route's geometry. */
-  static key({ width, height, style, look, route }: StillRequest): string {
+  static key({ width, height, kind, tone, look, route }: StillRequest): string {
     const first = route.coordinates[0];
     const last = route.coordinates.at(-1);
     const shape = [route.coordinates.length, first, last];
-    return [width, height, style, MapStyles.lookKey(look), ...shape].join('|');
+    return [width, height, kind, tone, MapStyles.lookKey(look), ...shape].join('|');
   }
 
   render(request: StillRequest): Promise<StillResult> {
@@ -71,7 +70,7 @@ export class StillMap {
     const path = new FlyoverPath(route, width / height);
     // The map's focal point moves into the band, the camera distance fits the route into it
     view.setPadding(band.top, height - band.bottom);
-    view.setCamera(path.overview(STILL_PITCH, 0, (band.bottom - band.top) / height));
+    view.setCamera(path.overview(FlyoverPath.STILL_PITCH, 0, (band.bottom - band.top) / height));
     await view.settle(20000);
 
     const bitmap = await createImageBitmap(view.canvas);
@@ -83,8 +82,15 @@ export class StillMap {
     return result;
   }
 
-  private async viewFor({ width, height, style, look, route }: StillRequest): Promise<MapView> {
-    const viewKey = `${width}|${height}|${style}|${MapStyles.lookKey(look)}`;
+  private async viewFor({
+    width,
+    height,
+    kind,
+    tone,
+    look,
+    route,
+  }: StillRequest): Promise<MapView> {
+    const viewKey = `${width}|${height}|${kind}|${tone}|${MapStyles.lookKey(look)}`;
     if (this.view && this.viewKey === viewKey) return this.view;
     this.view?.destroy();
     this.view = undefined;
@@ -96,7 +102,15 @@ export class StillMap {
       document.body.appendChild(this.host);
     }
     const center = route.coordinates[0]!;
-    this.view = await MapView.create(this.host, { width, height, style, look, center });
+    this.view = await MapView.create(this.host, {
+      width,
+      height,
+      kind,
+      tone,
+      look,
+      palette: MapStyles.palette(kind, tone),
+      center,
+    });
     this.viewKey = viewKey;
     return this.view;
   }

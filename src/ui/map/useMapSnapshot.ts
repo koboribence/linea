@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { MapStyles, type MapStyleId } from '../../domain/map/MapStyles';
+import { MapStyles, type MapTone } from '../../domain/map/MapStyles';
 import type { RouteShape } from '../../domain/route/RouteShape';
 import { StillMap, type StillRequest, type StillResult } from './StillMap';
 
@@ -17,23 +17,23 @@ export interface MapSnapshotState {
 }
 
 /**
- * The still 3D map for the image background. Only size, map style and the route
+ * The still 3D street map for the image background. Only size, dark/light tone and the route
  * cause a new render; the previous image stays visible until the new one is ready.
- * `start` (the activity's start time) sets where the sunlight comes from.
  */
 export function useMapSnapshot(
   enabled: boolean,
   route: RouteShape | undefined,
   size: { width: number; height: number },
-  style: MapStyleId,
-  start: Date | undefined,
+  tone: MapTone,
 ): MapSnapshotState {
   const stillMap = useRef<StillMap>(undefined);
   const [snapshot, setSnapshot] = useState<Snapshot>();
 
-  const look = useMemo(() => route && MapStyles.look(route.geo, start), [route, start]);
+  const look = useMemo(() => route && MapStyles.look(route.geo), [route]);
   const request: StillRequest | undefined =
-    enabled && route && look ? { ...size, style, look, route: route.geo } : undefined;
+    enabled && route && look
+      ? { ...size, kind: 'streets', tone, look, route: route.geo }
+      : undefined;
   const key = request ? StillMap.key(request) : '';
 
   useEffect(() => {
