@@ -45,4 +45,10 @@ describe('poster title', () => {
   it('falls back to the automatic title when the file has no name', () => {
     expect(PosterDefaults.create(activity(), []).title).toBeUndefined();
   });
+
+  it('keeps a remembered font set, and ignores one that no longer exists', () => {
+    expect(PosterDefaults.create(activity(), [], { fontId: 'scifi' }).fontId).toBe('scifi');
+    const removed = { fontId: 'comic-sans' } as unknown as { fontId: 'sport' };
+    expect(PosterDefaults.create(activity(), [], removed).fontId).toBe('sport');
+  });
 });

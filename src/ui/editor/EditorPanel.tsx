@@ -10,6 +10,7 @@ import type { MessageKey } from '../../i18n/messages/hu';
 import { Section } from '../controls/Section';
 import { Segmented } from '../controls/Segmented';
 import { Toggle } from '../controls/Toggle';
+import { FontPicker } from './FontPicker';
 import { PhotoPicker } from './PhotoPicker';
 import { StatPicker } from './StatPicker';
 import { ThemePicker } from './ThemePicker';
@@ -100,6 +101,10 @@ export function EditorPanel(props: EditorPanelProps) {
             }
           />
         </label>
+        <div className="field">
+          <span className="field__label">{t('editor.font')}</span>
+          <FontPicker value={design.fontId} onChange={(fontId) => update({ fontId })} />
+        </div>
         <Toggle
           label={t('editor.showDate')}
           checked={design.showDate}

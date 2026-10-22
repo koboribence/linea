@@ -3,15 +3,18 @@ import type { Box, ScreenPoint } from '../route/RouteShape';
 import { Graphemes } from '../format/Graphemes';
 import { Color } from './Color';
 import { PhotoPlacement } from './PhotoPlacement';
+import { PosterFonts, type FontFace, type PosterFont } from './PosterFont';
 import type { PosterScene, PosterStat } from './PosterScene';
 
 const BASE_WIDTH = 1080;
 /** Gap between stat columns, in units */
 const STAT_GAP = 32;
-// Emoji fonts in the stack, so emojis in the title draw in color instead of as boxes
-const DISPLAY_FONT =
-  '"Barlow Condensed", "Arial Narrow", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
-const BODY_FONT = 'Inter, system-ui, sans-serif';
+/** The brand wordmark always uses the brand font, whatever font set the poster has */
+const LOGO_FONT: FontFace = {
+  family: '"Barlow Condensed", "Arial Narrow", sans-serif',
+  weight: 800,
+  italic: true,
+};
 
 interface TitleLayout {
   lines: string[];
@@ -45,16 +48,10 @@ interface Layout {
  * and scaled by `u` (unit), so every format and resolution looks the same.
  */
 export class PosterRenderer {
-  /** Font faces the poster uses; load them before the first render. */
-  static readonly FONT_FACES = [
-    `italic 800 100px ${DISPLAY_FONT}`,
-    `700 100px ${DISPLAY_FONT}`,
-    `600 100px ${BODY_FONT}`,
-  ];
-
   private readonly u: number;
   private readonly pad: number;
   private readonly accent: Color;
+  private readonly font: PosterFont;
 
   private constructor(
     private readonly ctx: CanvasRenderingContext2D,
@@ -63,12 +60,17 @@ export class PosterRenderer {
     this.u = scene.width / BASE_WIDTH;
     this.pad = 80 * this.u;
     this.accent = Color.parse(scene.colors.accent);
+    this.font = scene.font;
   }
 
-  /** Resolves when the fonts (including Hungarian accented letters) are ready to draw. */
-  static async loadFonts(): Promise<void> {
+  /**
+   * Resolves when the poster's fonts (including Hungarian accented letters) are ready to draw.
+   * Font files download on first use only, so unused font sets cost nothing.
+   */
+  static async loadFonts(font: PosterFont): Promise<void> {
+    const faces = [font.title, font.value, font.label, LOGO_FONT];
     await Promise.all(
-      PosterRenderer.FONT_FACES.map((f) => document.fonts.load(f, 'ÁÉŐŰáéőű 0123')),
+      faces.map((face) => document.fonts.load(PosterFonts.css(face, 100), 'ÁÉŐŰáéőű 0123')),
     );
   }
 
@@ -140,9 +142,10 @@ export class PosterRenderer {
     const { u, pad, scene } = this;
     const maxWidth = scene.width - 2 * pad;
     const top = scene.eyebrow ? pad + 26 * u + 22 * u : pad;
-    const text = scene.title.toLocaleUpperCase();
-    const max = (isStory ? 136 : 112) * u;
-    const min = 60 * u;
+    const font = this.font;
+    const text = font.uppercase ? scene.title.toLocaleUpperCase() : scene.title;
+    const max = (isStory ? 136 : 112) * u * font.titleScale;
+    const min = 48 * u;
 
     let size = max;
     let lines = this.wrap(text, size, maxWidth);
@@ -153,7 +156,8 @@ export class PosterRenderer {
     if (lines.length > 2) lines = [lines[0]!, lines.slice(1).join(' ')];
     // A single word longer than the line (no space to break at) is cut too
     lines = lines.map((line) => this.ellipsize(line, maxWidth));
-    return { lines, size, bottom: top + lines.length * size * 0.92 };
+    const height = font.titleAscent + (lines.length - 1) * font.titleLineHeight + font.titleDescent;
+    return { lines, size, bottom: top + height * size };
   }
 
   /** Up to 3 per row; 4 make a 2×2 block on tall stories. Every value fits its own column. */
@@ -207,21 +211,23 @@ export class PosterRenderer {
     ctx.clearRect(0, 0, scene.width, scene.height);
     if (scene.transparent) return;
 
-    // A photo goes under the theme background, which then acts as an adjustable overlay
-    if (scene.photo) {
-      const { image, settings } = scene.photo;
-      const rect = PhotoPlacement.rect(image, scene, settings);
-      ctx.drawImage(image.source, rect.x, rect.y, rect.width, rect.height);
-      ctx.globalAlpha = settings.overlay;
-    }
-
     const [from, to] = scene.colors.background;
     const gradient = ctx.createLinearGradient(0, 0, scene.width, scene.height);
     gradient.addColorStop(0, from);
     gradient.addColorStop(1, to);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, scene.width, scene.height);
-    ctx.globalAlpha = 1;
+
+    // Photo on the theme background (which shows where the photo was moved away),
+    // then the same background again on top as an adjustable overlay
+    if (scene.photo) {
+      const { image, settings } = scene.photo;
+      const rect = PhotoPlacement.rect(image, scene, settings);
+      ctx.drawImage(image.source, rect.x, rect.y, rect.width, rect.height);
+      ctx.globalAlpha = settings.overlay;
+      ctx.fillRect(0, 0, scene.width, scene.height);
+      ctx.globalAlpha = 1;
+    }
 
     // Faint accent light behind the route makes dark themes feel lit
     if (scene.colors.glow) {
@@ -244,18 +250,19 @@ export class PosterRenderer {
 
     let y = pad;
     if (scene.eyebrow) {
-      this.setFont(`600 ${26 * u}px ${BODY_FONT}`, 3 * u);
+      this.setFont(PosterFonts.css(this.font.label, 26 * u), 3 * u);
       ctx.fillStyle = scene.colors.accent;
       ctx.textBaseline = 'top';
       ctx.fillText(this.ellipsize(scene.eyebrow.toLocaleUpperCase(), maxWidth), pad, y);
       y += 26 * u + 22 * u;
     }
 
-    this.setFont(`italic 800 ${title.size}px ${DISPLAY_FONT}`);
+    const { titleAscent, titleLineHeight } = this.font;
+    this.setFont(PosterFonts.css(this.font.title, title.size));
     ctx.fillStyle = scene.colors.text;
     ctx.textBaseline = 'alphabetic';
     title.lines.forEach((line, i) => {
-      ctx.fillText(line, pad, y + title.size * 0.78 + i * title.size * 0.92);
+      ctx.fillText(line, pad, y + title.size * (titleAscent + i * titleLineHeight));
     });
   }
 
@@ -344,7 +351,7 @@ export class PosterRenderer {
     const blockHeight = labelSize + gap + size * 0.74;
     const top = middle.y + (middle.height - blockHeight) / 2;
     this.textShadow();
-    this.setFont(`600 ${labelSize}px ${BODY_FONT}`, 4 * u);
+    this.setFont(PosterFonts.css(this.font.label, labelSize), 4 * u);
     ctx.fillStyle = scene.colors.muted;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
@@ -387,20 +394,29 @@ export class PosterRenderer {
     ctx.fillRect(pad, divider, scene.width - 2 * pad, 2 * u);
     this.textShadow();
 
-    layout.stats.forEach((stat, i) => {
-      const column = i % layout.columns;
-      const row = Math.floor(i / layout.columns);
-      const x = pad + column * (layout.columnWidth + STAT_GAP * u);
+    const { stats, columns, columnWidth } = layout;
+    const step = columnWidth + STAT_GAP * u;
+    // A lone stat or a short last row (e.g. 3 + 2) looks balanced only when centered
+    const centered = stats.length % columns !== 0 || stats.length === 1;
+
+    stats.forEach((stat, i) => {
+      const column = i % columns;
+      const row = Math.floor(i / columns);
+      const inRow = Math.min(columns, stats.length - row * columns);
+      const rowShift = ((columns - inRow) * step) / 2;
+      const x = pad + rowShift + column * step;
       const top = layout.top + row * layout.rowHeight;
 
       this.setLabelFont(layout.labelSize);
       ctx.fillStyle = scene.colors.muted;
-      ctx.textAlign = 'left';
+      ctx.textAlign = centered ? 'center' : 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText(this.ellipsize(stat.label.toLocaleUpperCase(), layout.columnWidth), x, top);
+      const label = this.ellipsize(stat.label.toLocaleUpperCase(), columnWidth);
+      ctx.fillText(label, centered ? x + columnWidth / 2 : x, top);
 
       const baseline = top + layout.labelSize + 14 * u + layout.valueSize * 0.74;
-      this.drawValue(stat, x, baseline, layout.valueSize, scene.colors.text);
+      const valueX = centered ? x + (columnWidth - this.valueWidth(stat, layout.valueSize)) / 2 : x;
+      this.drawValue(stat, valueX, baseline, layout.valueSize, scene.colors.text);
     });
   }
 
@@ -408,7 +424,7 @@ export class PosterRenderer {
     const { ctx, u, pad, scene } = this;
     const baseline = scene.height - 66 * u;
     this.textShadow();
-    this.setFont(`italic 800 ${38 * u}px ${DISPLAY_FONT}`);
+    this.setFont(PosterFonts.css(LOGO_FONT, 38 * u));
     ctx.fillStyle = scene.colors.text;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
@@ -448,20 +464,20 @@ export class PosterRenderer {
     const { ctx, scene } = this;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-    this.setFont(`700 ${size}px ${DISPLAY_FONT}`);
+    this.setFont(PosterFonts.css(this.font.value, size));
     ctx.fillStyle = color;
     ctx.fillText(stat.value, x, baseline);
     if (!stat.unit) return;
 
     const valueWidth = ctx.measureText(stat.value).width;
-    this.setFont(`700 ${size * 0.4}px ${DISPLAY_FONT}`);
+    this.setFont(PosterFonts.css(this.font.value, size * 0.4));
     ctx.fillStyle = scene.colors.muted;
     ctx.fillText(stat.unit, x + valueWidth + size * 0.08, baseline);
   }
 
   /** Stat label style; letter spacing grows with the size. */
   private setLabelFont(size: number): void {
-    this.setFont(`600 ${size}px ${BODY_FONT}`, size * 0.125);
+    this.setFont(PosterFonts.css(this.font.label, size), size * 0.125);
   }
 
   private labelWidth(label: string, size: number): number {
@@ -484,10 +500,10 @@ export class PosterRenderer {
   }
 
   private valueWidth(stat: PosterStat, size: number): number {
-    this.setFont(`700 ${size}px ${DISPLAY_FONT}`);
+    this.setFont(PosterFonts.css(this.font.value, size));
     let width = this.ctx.measureText(stat.value).width;
     if (stat.unit) {
-      this.setFont(`700 ${size * 0.4}px ${DISPLAY_FONT}`);
+      this.setFont(PosterFonts.css(this.font.value, size * 0.4));
       width += size * 0.08 + this.ctx.measureText(stat.unit).width;
     }
     return width;
@@ -495,7 +511,7 @@ export class PosterRenderer {
 
   /** Greedy word wrap at the given title size. */
   private wrap(text: string, size: number, maxWidth: number): string[] {
-    this.setFont(`italic 800 ${size}px ${DISPLAY_FONT}`);
+    this.setFont(PosterFonts.css(this.font.title, size));
     const lines: string[] = [];
     let line = '';
     for (const word of text.split(/\s+/).filter(Boolean)) {

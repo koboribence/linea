@@ -100,6 +100,13 @@ export const hu = {
   'editor.text': 'Szöveg',
   'editor.title': 'Cím',
   'editor.titleCount': '{count}/{max}',
+  'editor.font': 'Betűtípus',
+  'font.sport': 'Sport',
+  'font.script': 'Kézírás',
+  'font.scifi': 'Sci-fi',
+  'font.editorial': 'Magazin',
+  'font.halloween': 'Halloween',
+  'font.seasonal': 'Szezonális',
   'editor.showDate': 'Dátum és sportág',
 
   'editor.stats': 'Adatok a képen',

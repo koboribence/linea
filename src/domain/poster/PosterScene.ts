@@ -5,6 +5,7 @@ import type { ElevationProfile } from '../route/ElevationProfile';
 import type { RouteShape } from '../route/RouteShape';
 import type { MessageKey } from '../../i18n/messages/hu';
 import type { PhotoSettings } from './PhotoPlacement';
+import { PosterFonts, type PosterFont } from './PosterFont';
 import type { PosterDesign } from './PosterDesign';
 import { POSTER_FORMATS } from './PosterFormat';
 import { PosterTheme, type ThemeColors } from './PosterTheme';
@@ -29,6 +30,7 @@ export interface PosterScene {
   width: number;
   height: number;
   colors: ThemeColors;
+  font: PosterFont;
   transparent: boolean;
   photo?: { image: PhotoImage; settings: PhotoSettings };
   eyebrow?: string;
@@ -70,6 +72,7 @@ export class PosterSceneBuilder {
         background: design.customBackground,
         accent: design.customAccent,
       }),
+      font: PosterFonts.PRESETS[design.fontId],
       // A photo fills the background, so the image can't be a transparent sticker at the same time
       transparent: design.transparent && !photo,
       photo: photo && { image: photo, settings: design.photo },

@@ -15,24 +15,32 @@ describe('PhotoPlacement', () => {
     expect(rect.x).toBeCloseTo(-(rect.width - 1080) / 2);
   });
 
-  it('never leaves a gap, however far it is dragged', () => {
-    const farLeft = PhotoPlacement.pan(landscape, poster, centered, 99999, 0);
-    const rect = PhotoPlacement.rect(landscape, poster, { ...centered, ...farLeft });
-    expect(rect.x).toBeCloseTo(0);
-    expect(rect.x + rect.width).toBeGreaterThanOrEqual(1080);
-  });
-
-  it('moves the photo with the pointer', () => {
+  it('moves with the pointer in both directions', () => {
     const before = PhotoPlacement.rect(landscape, poster, centered);
-    const moved = PhotoPlacement.pan(landscape, poster, centered, 100, 0);
+    const moved = PhotoPlacement.pan(landscape, poster, centered, 100, -150);
     const after = PhotoPlacement.rect(landscape, poster, { ...centered, ...moved });
     expect(after.x - before.x).toBeCloseTo(100);
+    expect(after.y - before.y).toBeCloseTo(-150);
   });
 
-  it('can pan vertically only after zooming in, when the photo is taller than the poster', () => {
-    expect(PhotoPlacement.pan(landscape, poster, centered, 0, 100).posY).toBe(0.5);
-    const zoomed = { ...centered, zoom: 2 };
-    expect(PhotoPlacement.pan(landscape, poster, zoomed, 0, 100).posY).toBeLessThan(0.5);
+  it('can never be dragged completely out of view', () => {
+    for (const [dx, dy] of [
+      [99999, 0],
+      [-99999, 0],
+      [0, 99999],
+      [0, -99999],
+    ] as const) {
+      const offset = PhotoPlacement.pan(landscape, poster, centered, dx, dy);
+      const rect = PhotoPlacement.rect(landscape, poster, { ...centered, ...offset });
+      // Some of the photo still overlaps the poster
+      expect(Math.min(rect.x + rect.width, 1080) - Math.max(rect.x, 0)).toBeGreaterThan(0);
+      expect(Math.min(rect.y + rect.height, 1920) - Math.max(rect.y, 0)).toBeGreaterThan(0);
+    }
+  });
+
+  it('zooms out to show more of the photo', () => {
+    const rect = PhotoPlacement.rect(landscape, poster, { ...centered, zoom: 0.5 });
+    expect(rect.height).toBeCloseTo(960);
   });
 });
 

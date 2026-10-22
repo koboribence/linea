@@ -642,6 +642,56 @@ input {
   background: var(--graphite);
 }
 
+/* Font picker */
+.font-picker {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+.font-card {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--chalk);
+  cursor: pointer;
+}
+.font-card:hover {
+  border-color: var(--graphite);
+}
+.font-card[aria-checked='true'] {
+  border-color: color-mix(in srgb, var(--volt) 70%, transparent);
+  background: color-mix(in srgb, var(--volt) 7%, var(--surface));
+}
+.font-card__sample {
+  font-size: 26px;
+  line-height: 1.2;
+}
+.font-card__digits {
+  font-size: 15px;
+  color: var(--pebble);
+}
+.font-card__name {
+  font-size: 11px;
+  color: var(--pebble);
+  text-align: center;
+}
+.font-card[aria-checked='true'] .font-card__name {
+  color: var(--chalk);
+}
+.font-card__badge {
+  position: absolute;
+  top: -6px;
+  right: -4px;
+  font-size: 14px;
+  line-height: 1;
+}
+
 /* Stat picker */
 .stat-picker {
   display: grid;

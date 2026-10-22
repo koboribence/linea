@@ -4,6 +4,7 @@ import { Graphemes } from '../format/Graphemes';
 import type { StatId } from '../format/StatPresenter';
 import type { RouteColoring } from '../route/RouteShape';
 import { PhotoPlacement, type PhotoSettings } from './PhotoPlacement';
+import { PosterFonts, type FontId } from './PosterFont';
 import type { PosterFormatId } from './PosterFormat';
 import type { ThemeId } from './PosterTheme';
 
@@ -11,6 +12,7 @@ import type { ThemeId } from './PosterTheme';
 export interface PosterDesign {
   format: PosterFormatId;
   themeId: ThemeId;
+  fontId: FontId;
   customBackground?: string;
   customAccent?: string;
   /** No background: a PNG sticker for the user's own photo */
@@ -69,6 +71,7 @@ export class PosterDefaults {
   static readonly STYLE: PosterStyle = {
     format: 'story',
     themeId: 'volt',
+    fontId: 'sport',
     transparent: false,
     showDate: true,
     routeColoring: 'speed',
@@ -95,6 +98,8 @@ export class PosterDefaults {
       ...merged,
       title: name ? Graphemes.truncate(name, PosterDefaults.MAX_TITLE) : undefined,
       routeColoring: coloring.includes(merged.routeColoring) ? merged.routeColoring : 'solid',
+      // A font set removed in a later version falls back to the default
+      fontId: PosterFonts.IDS.includes(merged.fontId) ? merged.fontId : PosterDefaults.STYLE.fontId,
       stats: rememberedStats?.length
         ? PosterDefaults.carryOverStats(rememberedStats, activity, available)
         : PosterDefaults.defaultStats(activity.sport, available, activity.hasGps),

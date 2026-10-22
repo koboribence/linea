@@ -40,7 +40,9 @@ Három réteg, mindegyik egy dologért felel:
 | [ui/editor/EditorScreen.tsx](../src/ui/editor/EditorScreen.tsx), [EditorPanel.tsx](../src/ui/editor/EditorPanel.tsx), [ThemePicker.tsx](../src/ui/editor/ThemePicker.tsx), [StatPicker.tsx](../src/ui/editor/StatPicker.tsx) | A felület. |
 | [ui/editor/PosterCanvas.tsx](../src/ui/editor/PosterCanvas.tsx) | Élő előnézet. |
 | [ui/editor/PosterExporter.ts](../src/ui/editor/PosterExporter.ts) | Letöltés PNG-ként, megosztás a rendszer megosztás-menüjével. |
-| [poster/PhotoPlacement.ts](../src/domain/poster/PhotoPlacement.ts) | Háttérkép-beállítások (overlay, nagyítás, helyzet), kitöltő illesztés és húzás. |
+| [poster/PhotoPlacement.ts](../src/domain/poster/PhotoPlacement.ts) | Háttérkép-beállítások (overlay, nagyítás, helyzet), méretezés és szabad mozgatás. |
+| [poster/PosterFont.ts](../src/domain/poster/PosterFont.ts) | A választható betűtípus-készletek (cím, számok, címkék). |
+| [ui/editor/FontPicker.tsx](../src/ui/editor/FontPicker.tsx), [styles/fonts.ts](../src/styles/fonts.ts) | Betűtípus-választó kártyák; a betűtípusok regisztrálása. |
 | [ui/editor/PhotoLoader.ts](../src/ui/editor/PhotoLoader.ts), [PhotoPicker.tsx](../src/ui/editor/PhotoPicker.tsx) | Fotó betöltése és a „Háttérkép” szakasz vezérlői. |
 | [ui/editor/DesignStorage.ts](../src/ui/editor/DesignStorage.ts) | A stílus megjegyzése a következő fájlhoz. |
 | [poster/ThemeCode.ts](../src/domain/poster/ThemeCode.ts) | Saját színpár ↔ rövid kód (`v1-0e0f12-d4ff3a`) linkhez és QR-kódhoz. |
@@ -55,6 +57,7 @@ Három réteg, mindegyik egy dologért felel:
 |---|---|---|
 | `format` | `story`, `feed` vagy `square` | `story` |
 | `themeId` | `volt`, `chalk`, `ocean`, `dusk`, `forest` vagy `graphite` | `volt` |
+| `fontId` | Betűtípus-készlet: `sport`, `script`, `scifi`, `editorial` vagy `halloween` (lásd lent) | `sport` |
 | `customBackground`, `customAccent` | Saját szín, felülírja a témáét | – |
 | `transparent` | Átlátszó háttér: matrica a saját fotóra | `false` |
 | `title` | A cím; legfeljebb 50 látható karakter (`MAX_TITLE`), emojival is. `undefined` esetén automatikus | a fájlban szereplő név |
@@ -65,7 +68,7 @@ Három réteg, mindegyik egy dologért felel:
 | `privacyMeters` | Elrejtett táv az útvonal két végén: 0, 200, 500 vagy 1000 m | `200` |
 | `showElevation` | Magasságprofil | `true` |
 | `showLogo` | Logó a kép alján | `true` |
-| `photo` | Háttérkép beállításai: `overlay` (0–1), `zoom` (1–3), `posX`/`posY` (0–1). Csak betöltött képnél számít | overlay 55%, középre |
+| `photo` | Háttérkép beállításai: `overlay` (0–1), `zoom` (0,5–3), `offsetX`/`offsetY` (eltolás a középponttól). Csak betöltött képnél számít | overlay 55%, középen |
 
 **Mi marad meg a következő fájlnál (`RememberedDesign`):** a [DesignStorage](../src/ui/editor/DesignStorage.ts) a `localStorage`-ba menti a teljes kinézetet (`PosterStyle`) és a kiválasztott adatokat. A cím és a háttérkép nem marad meg: a cím az új fájl nevéből jön, a kép pedig egy adott edzéshez tartozik. Az edzés adatai és a fotó soha nem kerülnek tárolásra.
 
@@ -130,6 +133,32 @@ A számok kiterjedését (`bounds`) ciklussal számoljuk, nem `Math.min(...tömb
 
 Az `ElevationProfile.fromActivity` alapból 160 mintát vesz egyenletes távolságonként. Ha nincs magasságadat, vagy a pálya 10 m-nél laposabb, `undefined`, és a profil kapcsolója el sem jelenik.
 
+## Betűtípusok
+
+Egy készlet ([PosterFont.ts](../src/domain/poster/PosterFont.ts)) három szerepet határoz meg: **cím**, **számok** és **címkék**. A számok mindig egyenletes magasságú, jól olvasható számjegyeket kapnak, akkor is, ha a cím díszes.
+
+| Készlet | Cím | Számok | Címkék | Megjegyzés |
+|---|---|---|---|---|
+| Sport | Barlow Condensed 800 dőlt | Barlow Condensed 700 | Inter 600 | Alapértelmezett, nagybetűs |
+| Kézírás | Pacifico | Quicksand 700 | Quicksand 700 | Kisbetűs cím |
+| Sci-fi | Oxanium 800 | Oxanium 700 | Oxanium 600 | Nagybetűs |
+| Magazin | Playfair Display 900 dőlt | DM Serif Display | Inter 600 | A Playfair számjegyei „régies” stílusúak (fel-le ugrálnak), ezért a számok DM Serifet kapnak |
+| Halloween 🎃 | Nosifer | Metal Mania | Inter 600 | Szezonális (`seasonal: true`) |
+
+**Kiválasztási szempontok:**
+- **Licenc:** mindegyik OFL, és a [Fontsource](https://fontsource.org) csomagokból a saját oldalunkról töltődik (nem a Google-től).
+- **Magyar ékezetek:** mindegyiknek van latin-ext változata, tehát az „ő” és „ű” is benne van. Ez szűrte ki például az Orbitront és a Creepstert: náluk az „ő” és „ű” más betűtípussal jelenne meg.
+- **Betöltés:** a [styles/fonts.ts](../src/styles/fonts.ts) csak regisztrálja a betűtípusokat. A fájlok első használatkor töltődnek le (`PosterRenderer.loadFonts(font)`), így a nem használt készletek nem lassítanak.
+
+**Cím-metrikák:** a betűtípusok eltérő arányúak, ezért készletenként külön beállítás tartozik hozzájuk:
+- `uppercase`: nagybetűs-e a cím;
+- `titleScale`: a széles betűk kisebb mérettől indulnak;
+- `titleAscent`, `titleLineHeight`, `titleDescent`: az első sor alapvonala, a sortávolság és az alsó hely, a kézírás és a csöpögős betű lelógó részei miatt.
+
+**Logó:** a márka saját betűtípusa marad, bármelyik készlet van kiválasztva.
+
+**Szezonális hely:** a `seasonal` jelölésű készlet cserélhető; most Halloween, később például karácsonyi lehet. A felületen 🎃 jelvényt kap.
+
 ## Témák és színek
 
 Minden téma `ThemeColors` értékeket ad:
@@ -150,13 +179,14 @@ Minden téma `ThemeColors` értékeket ad:
 ## Háttérkép
 
 1. **Betöltés:** a „Háttérkép” szakaszban választható fotó. A [PhotoLoader](../src/ui/editor/PhotoLoader.ts) `createImageBitmap`-pel dekódolja; a telefonos fotók EXIF-elforgatását is alkalmazza (`imageOrientation: 'from-image'`). A 2400 px-nél nagyobb oldalú képet lekicsinyíti, hogy az újrarajzolás gyors maradjon. Ha a böngésző nem tudja megnyitni (pl. HEIC egyes rendszereken), hibaüzenet jelenik meg.
-2. **Kitöltés:** a [PhotoPlacement.rect](../src/domain/poster/PhotoPlacement.ts) a képet mindig a teljes posztert kitöltő méretre számolja (mint a CSS `object-fit: cover`), majd a `zoom`-mal nagyít. A `posX`/`posY` (0–1) adja meg, a túllógó részből mennyi esik a bal, illetve a felső oldalra. Ezért húzással sem jöhet létre üres sáv.
-3. **Overlay:** a kép fölé a téma háttér-színátmenete kerül `overlay` átlátszósággal: 0 = csak a fotó, 1 = csak a téma színe. Így a téma és a saját színek képpel is működnek. A szövegek fotón finom árnyékot kapnak.
-4. **Helyzet:**
-   - az előnézetet egérrel vagy ujjal húzva (`PhotoPlacement.pan`, a mozgás képernyőpixelből posztertpixelbe váltva);
+2. **Méret:** a [PhotoPlacement.rect](../src/domain/poster/PhotoPlacement.ts) a képet először a teljes posztert kitöltő méretre számolja (mint a CSS `object-fit: cover`), majd a `zoom`-mal (0,5–3) méretezi. 1 alatt a kép kisebb a poszternél, így többet mutat a fotóból.
+3. **Helyzet:** az `offsetX`/`offsetY` a kép középpontjának eltolása a poszter közepétől, poszterszélességben/-magasságban mérve (0 = középen). A kép **mindkét irányban szabadon** mozog. Egy irányban addig, amíg a túllógó része el nem fogy, de legalább a poszter felének megfelelő távolságig. Teljesen kihúzni a képből nem lehet.
+4. **Rajzolás:** a téma háttere → a fotó → a téma háttere újra, `overlay` átlátszósággal (0 = csak a fotó, 1 = csak a téma színe). Ahová a fotó nem ér el (szélre húzásnál vagy kicsinyítésnél), ott a téma háttere látszik. A szövegek fotón finom árnyékot kapnak.
+5. **Mozgatás a felületen:**
+   - az előnézetet egérrel vagy ujjal húzva (`PhotoPlacement.pan`, a mozgás képernyőpixelből poszterpixelbe váltva);
    - fókuszált előnézeten a nyilakkal, 24 px-es lépésben.
    A „Középre” gomb visszaállítja a nagyítást és a helyzetet.
-5. **Átlátszó mód:** képpel nem kombinálható; ilyenkor a kapcsolója eltűnik.
+6. **Átlátszó mód:** képpel nem kombinálható; ilyenkor a kapcsolója eltűnik.
 
 **A kép és az adatvédelem:** a dekódolt kép csak a memóriában van (`usePosterEditor`). Nem kerül a `localStorage`-ba, és a megosztólinkba sem. Cserekor vagy a szerkesztő bezárásakor a memória azonnal felszabadul (`ImageBitmap.close()`).
 
@@ -189,7 +219,7 @@ A rajzoló két lépésben dolgozik: a `layout()` kiszámolja a dobozokat, a `dr
 |---|---|
 | **Felső sor** | Dátum · sportág, Inter 26u, kiemelő színnel. |
 | **Cím** | Barlow Condensed 800 dőlt, nagybetűs. Story-ban 136u-ról, máshol 112u-ról indul, és addig kicsinyedik (legfeljebb 60u-ig), amíg 2 sorba nem fér. Ha így sem fér, vagy egyetlen szó hosszabb a sornál, „…”-tal rövidül. |
-| **Adatok** | Alul, elválasztó vonal fölött. Oszlopszám: legfeljebb 3 adatnál annyi, ahány adat; 4 adatnál Story-ban 2×2, máshol 4 egy sorban; 5–6 adatnál 3 oszlop, 2 sor. A címkék és az értékek zsugorodnak, amíg a legszélesebb is elfér az oszlopában, így vízszintesen soha nem lógnak egymásba. |
+| **Adatok** | Alul, elválasztó vonal fölött. Oszlopszám: legfeljebb 3 adatnál annyi, ahány adat; 4 adatnál Story-ban 2×2, máshol 4 egy sorban; 5–6 adatnál 3 oszlop, 2 sor. A címkék és az értékek zsugorodnak, amíg a legszélesebb is elfér az oszlopában, így vízszintesen soha nem lógnak egymásba. **Középre igazítás:** ha az utolsó sor nem teljes (pl. 5 adatnál 3 + 2), vagy csak 1 adat van, a hiányos sor középre kerül, és a cellákon belül is középre igazodik a szöveg. Teljes soroknál balra igazít. |
 | **Hely az útvonalnak** | Ha az adatok miatt a középső rész a képmagasság 24%-a alá szorulna, az adatok 10%-os lépésekben kisebbek lesznek (legfeljebb a felükre), amíg az útvonalnak elég hely marad. |
 | **Logó** | Bal alul. A márka neve útvonalszerű aláhúzással, rajtkarikával és célponttal. |
 | **Magasságprofil** | Az adatok fölött. Csak akkor kerül a képre, ha utána is marad legalább a képmagasság 26%-a az útvonalnak. Ezért négyzetes formátumban jellemzően elmarad. |
@@ -203,7 +233,7 @@ A rajzoló két lépésben dolgozik: a `layout()` kiszámolja a dobozokat, a `dr
   - nincs háttér;
   - a rajtkarika belseje valóban átlátszó (`destination-out`), így a fotó átlátszik rajta;
   - a szövegek finom árnyékot kapnak, hogy bármilyen fotón olvashatók maradjanak.
-- **Betűtípusok:** a `PosterRenderer.loadFonts()` az első rajzolás előtt betölti őket, az ékezetes karakterekkel együtt (`ÁÉŐŰ…`). Enélkül a canvas helyettesítő betűtípussal rajzolna.
+- **Betűtípusok:** a `PosterRenderer.loadFonts(font)` minden rajzolás előtt biztosítja, hogy a kiválasztott készlet be legyen töltve, az ékezetes karakterekkel együtt (`ÁÉŐŰ…`). Ha már betöltődött, azonnal visszatér. Enélkül a canvas helyettesítő betűtípussal rajzolna.
 
 ## Felület
 
@@ -246,8 +276,8 @@ A felület a `PosterTheme.IDS` alapján magától megjeleníti.
 |---|---|
 | [route.test.ts](../tests/route.test.ts) | Privacy zone, egyszerűsítés, vetítés (észak felül), doboz-illesztés, magasságprofil. |
 | [poster.test.ts](../tests/poster.test.ts) | Alapértelmezett adatok, tempó ↔ sebesség csere, téma-kontraszt, automatikus cím, jelenetépítés. |
-| [themes.test.ts](../tests/themes.test.ts) | Színkód oda-vissza alakítása és hibás kódok elutasítása, emojis karakterszámolás, cím a fájlnévből. |
-| [photo.test.ts](../tests/photo.test.ts) | Háttérkép kitöltése, húzás (rés nélkül), nagyítás utáni függőleges mozgatás; adatok átvitele a következő fájlra. |
+| [themes.test.ts](../tests/themes.test.ts) | Színkód oda-vissza alakítása és hibás kódok elutasítása, emojis karakterszámolás, cím a fájlnévből, megszűnt betűtípus-készlet kezelése. |
+| [photo.test.ts](../tests/photo.test.ts) | Háttérkép kitöltése, mozgatás mindkét irányban, a kép nem húzható ki teljesen, kicsinyítés; adatok átvitele a következő fájlra. |
 
 **Ellenőrzés:** a rajzolást (canvas) a jsdom nem tudja futtatni, ezért valódi böngészőben ellenőriztük, mind a három formátummal, beltéri és átlátszó esetekkel.
 

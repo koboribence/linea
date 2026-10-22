@@ -1,11 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type PointerEvent,
-  type RefObject,
-} from 'react';
+import { useEffect, useRef, type KeyboardEvent, type PointerEvent, type RefObject } from 'react';
 import { PosterRenderer } from '../../domain/poster/PosterRenderer';
 import type { PosterScene } from '../../domain/poster/PosterScene';
 
@@ -25,21 +18,26 @@ const KEY_STEP = 24;
  * CSS only scales it down, so what you see is exactly what gets downloaded.
  */
 export function PosterCanvas({ scene, canvasRef, onPan, panLabel }: PosterCanvasProps) {
-  const [fontsReady, setFontsReady] = useState(false);
   const lastPointer = useRef<{ x: number; y: number }>(undefined);
 
   useEffect(() => {
-    PosterRenderer.loadFonts().finally(() => setFontsReady(true));
-  }, []);
-
-  useEffect(() => {
-    if (!fontsReady || !canvasRef.current) return;
-    // Coalesce rapid changes (typing, sliders, dragging) into one draw per frame
-    const frame = requestAnimationFrame(() => {
-      if (canvasRef.current) PosterRenderer.render(canvasRef.current, scene);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [scene, fontsReady, canvasRef]);
+    let cancelled = false;
+    let frame = 0;
+    // Fonts of a newly picked set download first (instant once loaded); then coalesce
+    // rapid changes (typing, sliders, dragging) into one draw per frame
+    void PosterRenderer.loadFonts(scene.font)
+      .catch(() => undefined) // draw with fallback fonts rather than not at all
+      .then(() => {
+        if (cancelled) return;
+        frame = requestAnimationFrame(() => {
+          if (canvasRef.current) PosterRenderer.render(canvasRef.current, scene);
+        });
+      });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
+  }, [scene, canvasRef]);
 
   // Screen pixels → poster pixels (the preview is scaled down)
   const toPoster = () => {

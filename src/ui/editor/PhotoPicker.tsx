@@ -70,7 +70,7 @@ export function PhotoPicker({ hasPhoto, settings, onChange, onPick, onRemove }: 
               id="photo-zoom"
               className="range"
               type="range"
-              min={1}
+              min={PhotoPlacement.MIN_ZOOM}
               max={PhotoPlacement.MAX_ZOOM}
               step={0.01}
               value={settings.zoom}
@@ -82,7 +82,7 @@ export function PhotoPicker({ hasPhoto, settings, onChange, onPick, onRemove }: 
             <button
               type="button"
               className="button button--secondary button--small"
-              onClick={() => onChange({ ...settings, zoom: 1, posX: 0.5, posY: 0.5 })}
+              onClick={() => onChange({ ...settings, zoom: 1, offsetX: 0, offsetY: 0 })}
             >
               {i18n.t('photo.center')}
             </button>

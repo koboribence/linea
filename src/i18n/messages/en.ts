@@ -100,6 +100,13 @@ export const en: Messages = {
   'editor.text': 'Text',
   'editor.title': 'Title',
   'editor.titleCount': '{count}/{max}',
+  'editor.font': 'Font',
+  'font.sport': 'Sport',
+  'font.script': 'Script',
+  'font.scifi': 'Sci-fi',
+  'font.editorial': 'Editorial',
+  'font.halloween': 'Halloween',
+  'font.seasonal': 'Seasonal',
   'editor.showDate': 'Date and sport',
 
   'editor.stats': 'Stats on the image',
