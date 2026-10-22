@@ -1,10 +1,15 @@
 import type { ElevationProfile } from '../route/ElevationProfile';
 import type { Box, ScreenPoint } from '../route/RouteShape';
+import { Graphemes } from '../format/Graphemes';
 import { Color } from './Color';
 import type { PosterScene, PosterStat } from './PosterScene';
 
 const BASE_WIDTH = 1080;
-const DISPLAY_FONT = '"Barlow Condensed", "Arial Narrow", sans-serif';
+/** Gap between stat columns, in units */
+const STAT_GAP = 32;
+// Emoji fonts in the stack, so emojis in the title draw in color instead of as boxes
+const DISPLAY_FONT =
+  '"Barlow Condensed", "Arial Narrow", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
 const BODY_FONT = 'Inter, system-ui, sans-serif';
 
 interface TitleLayout {
@@ -96,10 +101,17 @@ export class PosterRenderer {
     const hero = scene.route ? undefined : scene.stats[0];
     const gridStats = hero ? scene.stats.slice(1) : scene.stats;
     const bottom = scene.logo ? scene.height - 150 * u : scene.height - pad;
-    const stats = gridStats.length > 0 ? this.layoutStats(gridStats, bottom, isStory) : undefined;
-    const divider = stats ? stats.top - 40 * u : undefined;
-
     const middleTop = title.bottom + 56 * u;
+
+    // Many stats can crowd out the route: shrink them until the middle keeps its share
+    const minMiddle = scene.height * 0.24;
+    let stats: StatsLayout | undefined;
+    for (let scale = 1; scale >= 0.5; scale -= 0.1) {
+      stats =
+        gridStats.length > 0 ? this.layoutStats(gridStats, bottom, isStory, scale) : undefined;
+      if (!stats || stats.top - 40 * u - 56 * u - middleTop >= minMiddle) break;
+    }
+    const divider = stats ? stats.top - 40 * u : undefined;
     let middleBottom = (divider ?? bottom) - 56 * u;
 
     // The profile only fits when the route keeps enough room
@@ -137,31 +149,44 @@ export class PosterRenderer {
       size -= 4 * u;
       lines = this.wrap(text, size, maxWidth);
     }
-    if (lines.length > 2) lines = [lines[0]!, this.ellipsize(lines.slice(1).join(' '), maxWidth)];
+    if (lines.length > 2) lines = [lines[0]!, lines.slice(1).join(' ')];
+    // A single word longer than the line (no space to break at) is cut too
+    lines = lines.map((line) => this.ellipsize(line, maxWidth));
     return { lines, size, bottom: top + lines.length * size * 0.92 };
   }
 
-  private layoutStats(stats: PosterStat[], bottom: number, isStory: boolean): StatsLayout {
+  /** Up to 3 per row; 4 make a 2×2 block on tall stories. Every value fits its own column. */
+  private static columnsFor(count: number, isStory: boolean): number {
+    if (count <= 3) return count;
+    if (count === 4) return isStory ? 2 : 4;
+    return 3;
+  }
+
+  private layoutStats(
+    stats: PosterStat[],
+    bottom: number,
+    isStory: boolean,
+    scale: number,
+  ): StatsLayout {
     const { u, pad, scene } = this;
-    const columns = isStory && stats.length === 4 ? 2 : stats.length;
+    const columns = PosterRenderer.columnsFor(stats.length, isStory);
     const rows = Math.ceil(stats.length / columns);
-    const gap = 32 * u;
-    const columnWidth = (scene.width - 2 * pad - (columns - 1) * gap) / columns;
+    const columnWidth = (scene.width - 2 * pad - (columns - 1) * STAT_GAP * u) / columns;
 
     // Shrink labels and numbers until the widest one fits its column
-    let labelSize = 24 * u;
+    let labelSize = Math.max(17, 24 * scale) * u;
     for (const stat of stats) {
       const width = this.labelWidth(stat.label, labelSize);
-      if (width > columnWidth) labelSize = Math.max(17 * u, (labelSize * columnWidth) / width);
+      if (width > columnWidth) labelSize = Math.max(16 * u, (labelSize * columnWidth) / width);
     }
-    let valueSize = (columns <= 2 ? 120 : 96) * u;
+    let valueSize = (columns <= 2 ? 120 : columns === 3 ? 100 : 88) * u * scale;
     for (const stat of stats) {
       const width = this.valueWidth(stat, valueSize);
       if (width > columnWidth) valueSize *= columnWidth / width;
     }
 
     const rowHeight = labelSize + 14 * u + valueSize * 0.74;
-    const rowGap = 56 * u;
+    const rowGap = Math.max(32, 56 * scale) * u;
     const top = bottom - rows * rowHeight - (rows - 1) * rowGap;
     return {
       stats,
@@ -298,20 +323,25 @@ export class PosterRenderer {
   private drawHero(stat: PosterStat, middle: Box): void {
     const { ctx, u, scene } = this;
     const cx = middle.x + middle.width / 2;
-    let size = 300 * u;
+    const labelSize = 30 * u;
+    const gap = 24 * u;
+
+    // As big as fits both the width and the height of the middle area (digits are ~0.74 tall)
+    let size = Math.min(300 * u, Math.max(0, middle.height - labelSize - gap) / 0.74);
     const width = this.valueWidth(stat, size);
     if (width > middle.width) size *= middle.width / width;
 
-    const cy = middle.y + middle.height / 2;
+    const blockHeight = labelSize + gap + size * 0.74;
+    const top = middle.y + (middle.height - blockHeight) / 2;
     this.textShadow();
-    this.setFont(`600 ${30 * u}px ${BODY_FONT}`, 4 * u);
+    this.setFont(`600 ${labelSize}px ${BODY_FONT}`, 4 * u);
     ctx.fillStyle = scene.colors.muted;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText(stat.label.toLocaleUpperCase(), cx, cy - size * 0.42);
+    ctx.fillText(stat.label.toLocaleUpperCase(), cx, top + labelSize);
 
     const total = this.valueWidth(stat, size);
-    this.drawValue(stat, cx - total / 2, cy + size * 0.36, size, scene.colors.accent);
+    this.drawValue(stat, cx - total / 2, top + blockHeight, size, scene.colors.accent);
   }
 
   private drawElevation(profile: ElevationProfile, box: Box): void {
@@ -350,7 +380,7 @@ export class PosterRenderer {
     layout.stats.forEach((stat, i) => {
       const column = i % layout.columns;
       const row = Math.floor(i / layout.columns);
-      const x = pad + column * (layout.columnWidth + 32 * u);
+      const x = pad + column * (layout.columnWidth + STAT_GAP * u);
       const top = layout.top + row * layout.rowHeight;
 
       this.setLabelFont(layout.labelSize);
@@ -471,12 +501,14 @@ export class PosterRenderer {
     return lines;
   }
 
-  /** Shortens text with "…" to fit the width, using the current font. */
+  /** Shortens text with "…" to fit the width, using the current font. Never splits an emoji. */
   private ellipsize(text: string, maxWidth: number): string {
     if (this.ctx.measureText(text).width <= maxWidth) return text;
-    let end = text.length;
-    while (end > 1 && this.ctx.measureText(text.slice(0, end) + '…').width > maxWidth) end--;
-    return text.slice(0, end).trimEnd() + '…';
+    const chars = Graphemes.split(text);
+    let end = chars.length;
+    const cut = () => chars.slice(0, end).join('').trimEnd() + '…';
+    while (end > 1 && this.ctx.measureText(cut()).width > maxWidth) end--;
+    return cut();
   }
 
   private setFont(font: string, letterSpacing = 0): void {

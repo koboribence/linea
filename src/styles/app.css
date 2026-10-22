@@ -48,6 +48,48 @@ input {
   display: grid;
   gap: 24px;
 }
+
+.app__brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--graphite);
+  border-radius: 999px;
+  background: none;
+  color: var(--chalk);
+  padding: 7px 14px 7px 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.back-button:hover {
+  border-color: var(--pebble);
+}
+.back-button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.notice {
+  margin: 0;
+  padding: 12px 16px;
+  border-left: 2px solid var(--volt);
+  border-radius: 0 10px 10px 0;
+  background: var(--surface);
+  font-size: 14px;
+  max-width: 65ch;
+}
 .app--wide .app__main {
   gap: 16px;
 }
@@ -138,6 +180,11 @@ input {
 .button--secondary:hover {
   background: #353943;
 }
+.button--small {
+  justify-self: start;
+  padding: 8px 14px;
+  font-size: 13px;
+}
 .button:disabled {
   opacity: 0.5;
   cursor: progress;
@@ -199,22 +246,6 @@ input {
   margin: 0;
   color: var(--danger);
   font-weight: 500;
-}
-
-.dropzone--compact {
-  grid-template-columns: 1fr auto;
-  justify-items: start;
-  text-align: left;
-  align-items: center;
-  padding: 10px 12px 10px 20px;
-  gap: 4px 16px;
-}
-.dropzone--compact .dropzone__title {
-  font-size: 18px;
-  color: var(--pebble);
-}
-.dropzone--compact .dropzone__error {
-  grid-column: 1 / -1;
 }
 
 /* Editor layout */
@@ -314,6 +345,17 @@ input {
 .field__label {
   font-size: 13px;
   font-weight: 500;
+}
+.field__label--split {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.field__counter {
+  color: var(--pebble);
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
 }
 .field__hint {
   margin: 0;
@@ -499,6 +541,77 @@ input {
   border-radius: 50%;
 }
 
+.theme-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+.theme-actions__hint {
+  color: var(--pebble);
+  font-size: 13px;
+}
+
+/* Share dialog */
+.dialog {
+  width: min(400px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--chalk);
+}
+.dialog::backdrop {
+  background: rgba(5, 6, 8, 0.7);
+}
+.dialog__body {
+  display: grid;
+  gap: 14px;
+  padding: 24px;
+}
+.dialog__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 24px;
+  text-transform: uppercase;
+}
+.dialog__colors {
+  display: flex;
+  gap: 6px;
+}
+.dialog__colors span {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--line);
+}
+.dialog__hint {
+  margin: 0;
+  color: var(--pebble);
+  font-size: 13px;
+}
+.dialog__link {
+  font-size: 12px;
+  color: var(--pebble);
+}
+.dialog__actions {
+  display: flex;
+  gap: 8px;
+}
+.qr {
+  display: block;
+  width: 100%;
+  max-width: 240px;
+  aspect-ratio: 1;
+  justify-self: center;
+  border-radius: 8px;
+}
+.qr--loading {
+  background: var(--graphite);
+}
+
 /* Stat picker */
 .stat-picker {
   display: grid;
@@ -581,23 +694,6 @@ input {
 @media (max-width: 520px) {
   .dropzone {
     padding: 40px 16px;
-  }
-  .dropzone--compact {
-    grid-template-columns: 1fr;
-  }
-  .swatches {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-/* Touch devices can't drag files, so the compact bar is just the button */
-@media (hover: none) {
-  .dropzone--compact {
-    border: 0;
-    padding: 0;
-  }
-  .dropzone--compact .dropzone__text {
-    display: none;
   }
 }
 

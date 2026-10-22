@@ -1,5 +1,6 @@
 import type { Activity } from '../activity/Activity';
 import type { SportType } from '../activity/SportType';
+import { Graphemes } from '../format/Graphemes';
 import type { StatId } from '../format/StatPresenter';
 import type { RouteColoring } from '../route/RouteShape';
 import type { PosterFormatId } from './PosterFormat';
@@ -13,7 +14,7 @@ export interface PosterDesign {
   customAccent?: string;
   /** No background: a PNG sticker for the user's own photo */
   transparent: boolean;
-  /** Undefined = automatic title ("Morning Run") that follows the language */
+  /** Starts as the activity's own name; undefined = automatic title ("Morning Run") */
   title?: string;
   showDate: boolean;
   /** Shown stats in order, at most PosterDefaults.MAX_STATS */
@@ -52,7 +53,12 @@ const PACE_SPEED_PAIRS: [StatId, StatId][] = [
 ];
 
 export class PosterDefaults {
-  static readonly MAX_STATS = 4;
+  /** The user may pick this many; the layout shrinks the numbers to keep them apart. */
+  static readonly MAX_STATS = 6;
+  /** A fresh design starts with this many: the most airy layout. */
+  static readonly DEFAULT_STAT_COUNT = 4;
+  /** Title length in visible characters (an emoji counts as one). */
+  static readonly MAX_TITLE = 50;
 
   static readonly STYLE: PosterStyle = {
     format: 'story',
@@ -66,7 +72,7 @@ export class PosterDefaults {
     showLogo: true,
   };
 
-  /** A good-looking first design: sport-specific stats, remembered style. */
+  /** A good-looking first design: the activity's name, sport-specific stats, remembered style. */
   static create(
     activity: Activity,
     available: StatId[],
@@ -74,8 +80,10 @@ export class PosterDefaults {
   ): PosterDesign {
     const merged = { ...PosterDefaults.STYLE, ...style };
     const coloring = PosterDefaults.coloringOptions(activity);
+    const name = activity.meta.name?.trim();
     return {
       ...merged,
+      title: name ? Graphemes.truncate(name, PosterDefaults.MAX_TITLE) : undefined,
       routeColoring: coloring.includes(merged.routeColoring) ? merged.routeColoring : 'solid',
       stats: PosterDefaults.defaultStats(activity.sport, available, activity.hasGps),
     };
@@ -85,10 +93,10 @@ export class PosterDefaults {
     const has = (id: StatId) => available.includes(id);
     const chosen = (hasGps ? PREFERRED_STATS[sport] : INDOOR_STATS).filter(has);
     for (const id of FALLBACK_STATS) {
-      if (chosen.length >= PosterDefaults.MAX_STATS) break;
+      if (chosen.length >= PosterDefaults.DEFAULT_STAT_COUNT) break;
       if (has(id) && !chosen.includes(id)) chosen.push(id);
     }
-    return chosen.slice(0, PosterDefaults.MAX_STATS);
+    return chosen.slice(0, PosterDefaults.DEFAULT_STAT_COUNT);
   }
 
   /** Swaps pace ↔ speed stats in place, so a sport change keeps the user's layout. */

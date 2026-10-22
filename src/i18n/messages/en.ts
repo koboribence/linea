@@ -9,7 +9,6 @@ export const en: Messages = {
   'drop.browse': 'Choose file',
   'drop.privacy': 'Your file stays in your browser. Nothing is uploaded.',
   'drop.loading': 'Reading…',
-  'drop.another': 'Another file',
   'drop.release': 'Release to open',
 
   'error.unsupported': "We don't recognize this file type. Drop a FIT, GPX or TCX file.",
@@ -41,8 +40,8 @@ export const en: Messages = {
   'stat.maxSpeed': 'Max speed',
   'stat.elevationGain': 'Elevation gain',
   'stat.elevationLoss': 'Elevation loss',
-  'stat.maxElevation': 'Highest point',
-  'stat.minElevation': 'Lowest point',
+  'stat.maxElevation': 'Max elevation',
+  'stat.minElevation': 'Min elevation',
   'stat.avgHeartRate': 'Avg heart rate',
   'stat.maxHeartRate': 'Max heart rate',
   'stat.avgPower': 'Avg power',
@@ -60,7 +59,10 @@ export const en: Messages = {
   'editor.colors': 'Colors',
   'editor.background': 'Background',
   'editor.accent': 'Accent',
-  'editor.resetColors': 'Theme colors',
+  'editor.saveTheme': 'Save colors',
+  'editor.shareTheme': 'Send to phone',
+  'editor.deleteTheme': 'Delete',
+  'editor.savedHint': 'Saved in this browser.',
   'editor.transparent': 'Transparent background',
   'editor.transparentHint': 'A sticker for your own photo.',
   'theme.volt': 'Volt',
@@ -69,9 +71,22 @@ export const en: Messages = {
   'theme.dusk': 'Dusk',
   'theme.forest': 'Forest',
   'theme.graphite': 'Graphite',
+  'theme.custom': 'Mine',
+
+  'share.title': 'Send colors to your phone',
+  'share.hint':
+    "Scan the QR code with your phone's camera. Opening the link saves the colors there too.",
+  'share.copy': 'Copy link',
+  'share.copied': 'Copied',
+  'share.close': 'Close',
+  'share.received': 'New colors saved. Load your activity and you will find them among the colors.',
+
+  'nav.back': 'Back',
+  'nav.backLabel': 'Back to file upload',
 
   'editor.text': 'Text',
   'editor.title': 'Title',
+  'editor.titleCount': '{count}/{max}',
   'editor.showDate': 'Date and sport',
 
   'editor.stats': 'Stats on the image',

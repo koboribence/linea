@@ -43,5 +43,12 @@ export function useActivityFile() {
 
   const preload = useCallback(() => loader.preload(), []);
 
-  return { state, loaded, open, preload };
+  /** Back to the upload screen. */
+  const close = useCallback(() => {
+    latestRequest.current++; // ignore a load that may still be running
+    setLoaded(undefined);
+    setState({ status: 'idle' });
+  }, []);
+
+  return { state, loaded, open, preload, close };
 }

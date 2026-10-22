@@ -7,18 +7,10 @@ interface DropZoneProps {
   /** Called on first drag or hover, to start downloading parser code early. */
   onIntent?: () => void;
   busy?: boolean;
-  /** Slim bar used once an activity is already shown. */
-  compact?: boolean;
   error?: string;
 }
 
-export function DropZone({
-  onFile,
-  onIntent,
-  busy = false,
-  compact = false,
-  error,
-}: DropZoneProps) {
+export function DropZone({ onFile, onIntent, busy = false, error }: DropZoneProps) {
   const { i18n } = useLocale();
   const input = useRef<HTMLInputElement>(null);
   // Counts nested dragenter/dragleave pairs, so child elements don't cause flicker
@@ -45,9 +37,7 @@ export function DropZone({
     if (file) onFile(file);
   };
 
-  const className = ['dropzone', compact && 'dropzone--compact', dragging && 'dropzone--active']
-    .filter(Boolean)
-    .join(' ');
+  const className = ['dropzone', dragging && 'dropzone--active'].filter(Boolean).join(' ');
 
   return (
     <div
@@ -63,7 +53,7 @@ export function DropZone({
         <p className="dropzone__title">
           {busy ? i18n.t('drop.loading') : dragging ? i18n.t('drop.release') : i18n.t('drop.title')}
         </p>
-        {!compact && <p className="dropzone__hint">{i18n.t('drop.hint')}</p>}
+        <p className="dropzone__hint">{i18n.t('drop.hint')}</p>
       </div>
 
       <button
@@ -72,7 +62,7 @@ export function DropZone({
         disabled={busy}
         onClick={() => input.current?.click()}
       >
-        {compact ? i18n.t('drop.another') : i18n.t('drop.browse')}
+        {i18n.t('drop.browse')}
       </button>
 
       <input
@@ -92,7 +82,7 @@ export function DropZone({
           {error}
         </p>
       )}
-      {!compact && <p className="dropzone__privacy">{i18n.t('drop.privacy')}</p>}
+      <p className="dropzone__privacy">{i18n.t('drop.privacy')}</p>
     </div>
   );
 }

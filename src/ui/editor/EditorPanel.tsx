@@ -1,4 +1,5 @@
 import type { SportType } from '../../domain/activity/SportType';
+import { Graphemes } from '../../domain/format/Graphemes';
 import type { StatItem } from '../../domain/format/StatPresenter';
 import { PosterDefaults, type PosterDesign } from '../../domain/poster/PosterDesign';
 import { POSTER_FORMAT_IDS } from '../../domain/poster/PosterFormat';
@@ -61,15 +62,28 @@ export function EditorPanel(props: EditorPanelProps) {
 
       <Section title={t('editor.text')}>
         <label className="field">
-          <span className="field__label">{t('editor.title')}</span>
+          <span className="field__label field__label--split">
+            {t('editor.title')}
+            <span className="field__counter">
+              {i18n.t('editor.titleCount', {
+                count: Graphemes.count(design.title ?? ''),
+                max: PosterDefaults.MAX_TITLE,
+              })}
+            </span>
+          </span>
           <input
             id="poster-title"
             className="text-input"
             type="text"
             value={design.title ?? ''}
             placeholder={props.autoTitle}
-            maxLength={60}
-            onChange={(event) => update({ title: event.target.value || undefined })}
+            // Limit by visible characters, not UTF-16 units, so emojis aren't cut in half
+            onChange={(event) =>
+              update({
+                title:
+                  Graphemes.truncate(event.target.value, PosterDefaults.MAX_TITLE) || undefined,
+              })
+            }
           />
         </label>
         <Toggle

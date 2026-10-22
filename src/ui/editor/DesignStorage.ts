@@ -1,4 +1,5 @@
 import type { PosterDesign, PosterStyle } from '../../domain/poster/PosterDesign';
+import type { CustomTheme } from '../../domain/poster/ThemeCode';
 
 const STORAGE_KEY = 'poster-style';
 
@@ -16,6 +17,19 @@ export class DesignStorage {
   static save(design: PosterDesign): void {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { title, stats, ...style } = design;
+    DesignStorage.write(style);
+  }
+
+  /** Makes these colors the starting look for the next file (e.g. after opening a theme link). */
+  static applyColors(theme: CustomTheme): void {
+    DesignStorage.write({
+      ...DesignStorage.load(),
+      customBackground: theme.background,
+      customAccent: theme.accent,
+    });
+  }
+
+  private static write(style: Partial<PosterStyle>): void {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(style));
     } catch {
