@@ -20,7 +20,6 @@ export interface CameraShot {
 /** Vertical field of view of the map camera (MapLibre's default), degrees. */
 const FOV = 36.87;
 const RAD = Math.PI / 180;
-/** Pieces of route averaged for the camera direction. */
 /** Points of the precomputed heading track along the route. */
 const HEADING_STEPS = 800;
 /** Stretch (share of the route, each side) giving the local direction of travel. */
@@ -56,7 +55,7 @@ export class FlyoverPath {
 
   /**
    * aspect = output width / height (portrait videos need the camera further away);
-   * closest = how near the chase camera may come, meters (blurry imagery needs more height);
+   * closest = how near the chase camera may come, meters;
    * share = part of the image height the whole route may fill in overview shots.
    */
   constructor(
@@ -75,7 +74,7 @@ export class FlyoverPath {
     this.extentWidth = haversine(this.center[1], minLon, this.center[1], maxLon);
     this.extentHeight = haversine(minLat, this.center[0], maxLat, this.center[0]);
     this.overviewDistance = this.fitDistance(OVERVIEW_PITCH, 0, share) * 1.2;
-    this.chaseDistance = Math.max(closest, Math.min(2500, this.total * 0.06));
+    this.chaseDistance = Math.max(closest, Math.min(1200, this.total * 0.03));
     this.headings = this.computeHeadings();
   }
 

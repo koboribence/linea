@@ -72,8 +72,8 @@ Három réteg, mindegyik egy dologért felel:
 | `showElevation` | Magasságprofil | `true` |
 | `showLogo` | Logó a kép alján | `true` |
 | `background` | `theme` (szín), `map` (3D térkép) vagy `photo` (fotó) | `theme` |
-| `mapStyle` | `dark` vagy `satellite`, lásd [map-flyover.md](map-flyover.md) | `dark` |
-| `videoSeconds` | A videó hossza: 10, 15 vagy 20 mp | 15 |
+| `mapStyle` | A videó térképe: `night`, `dawn` vagy `neon`, lásd [map-flyover.md](map-flyover.md). Megszűnt stílus (pl. `satellite`) mentve az alapértékre áll vissza. | `night` |
+| `videoSeconds` | A videó hossza: 10, 20 vagy 30 mp | 20 |
 | `photo` | Háttérkép beállításai: `overlay` (0–1), `zoom` (0,5–3), `offsetX`/`offsetY` (eltolás a középponttól). Csak betöltött képnél számít | overlay 55%, középen |
 
 **Mi marad meg a következő fájlnál (`RememberedDesign`):** a [DesignStorage](../src/ui/editor/DesignStorage.ts) a `localStorage`-ba menti a teljes kinézetet (`PosterStyle`) és a kiválasztott adatokat. A cím és a háttérkép nem marad meg: a cím az új fájl nevéből jön, a kép pedig egy adott edzéshez tartozik. Az edzés adatai és a fotó soha nem kerülnek tárolásra.
@@ -95,7 +95,7 @@ Ismeretlen vagy régi azonosítók a tárolóból egyszerűen kimaradnak.
 
 | Eset | Lista (amelyik elérhető, abból az első 4) |
 |---|---|
-| Futás | táv, átlagtempó, átlagsebesség (km/h), mozgásidő, emelkedés |
+| Futás | táv, átlagsebesség (perc/km), mozgásidő, emelkedés, átlagpulzus |
 | Bringa | táv, átlagsebesség, mozgásidő, emelkedés |
 | Egyéb | táv, mozgásidő, átlagsebesség, emelkedés |
 | GPS nélkül (beltéri) | táv, mozgásidő, teljes idő, átlagwatt, átlagpulzus |
@@ -110,7 +110,7 @@ Ha 4-nél kevesebb jön össze, a teljes idő, az átlagwatt, az átlagpulzus é
 
 **Öröklés a következő fájlra:** az adatválasztás csak **azonos sportágú** fájlra öröklődik (`statsSport`). Egy bringás választás (pl. watt) futásnál értelmetlen, ezért más sportágnál az alapértelmezett lista jön. A sportág nélkül tárolt régi választás más sportágnak számít.
 
-**Futás és km/h:** futásnál a tempó mellett az átlag- és a max. sebesség (km/h) is választható, és az átlagsebesség alapból a képen van.
+**Futás és sebesség:** a futók a tempót is sebességnek hívják, ezért futásnál a magyar felület „Átlagsebesség” és „Max. sebesség” néven mutatja, de perc:mp/km-ben (`avgPace`, `bestPace`). Km/h-s érték futásnál nincs; egy korábban mentett km/h-s választás tempóra cserélődik, és nem duplázódik.
 
 ## Sportág a szerkesztőben
 
@@ -190,7 +190,7 @@ Minden téma `ThemeColors` értékeket ad:
 
 A felület tetején „Kép | Videó” váltó van; videó csak GPS-útvonallal érhető el. Kép módban a „Háttér” szakaszban három lehetőség közül lehet választani:
 - **Szín:** a téma színátmenete.
-- **3D térkép:** sötét vagy műholdas térkép, rajta az útvonal. A részleteket lásd: [map-flyover.md](map-flyover.md).
+- **3D térkép:** sötét, vonalas utcás térkép domborzattal, rajta az útvonal. A részleteket lásd: [map-flyover.md](map-flyover.md).
 - **Fotó:** a felhasználó saját képe, lásd lent.
 
 ## Kézi dátum

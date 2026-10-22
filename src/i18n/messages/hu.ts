@@ -34,8 +34,9 @@ export const hu = {
   'stat.distance': 'Táv',
   'stat.movingTime': 'Mozgásidő',
   'stat.elapsedTime': 'Teljes idő',
-  'stat.avgPace': 'Átlagtempó',
-  'stat.bestPace': 'Legjobb tempó',
+  // Runners call their pace "speed" too; it is shown in min/km
+  'stat.avgPace': 'Átlagsebesség',
+  'stat.bestPace': 'Max. sebesség',
   'stat.avgSpeed': 'Átlagsebesség',
   'stat.maxSpeed': 'Max. sebesség',
   'stat.elevationGain': 'Emelkedés',
@@ -106,15 +107,14 @@ export const hu = {
   'background.map': '3D térkép',
   'background.photo': 'Fotó',
   'map.style': 'Térkép',
-  'mapStyle.dark': 'Sötét',
-  'mapStyle.satellite': 'Műhold',
-  'mapStyle.satelliteHint':
-    'Az ingyenes műholdkép felbontása kb. 10 m, ezért közelről elmosódott; a videón a kamera magasabbról filmez.',
+  'mapStyle.night': 'Éjszaka',
+  'mapStyle.dawn': 'Hajnal',
+  'mapStyle.neon': 'Neon',
   'map.loading': 'Térkép betöltése…',
   'map.failed': 'A térképet nem sikerült betölteni. Ellenőrizd az internetkapcsolatot.',
   'map.needsRoute': 'A 3D térképhez GPS-útvonal kell.',
   'map.privacy':
-    'A térképhez a böngésződ letölti a környék műholdképét. A szolgáltató így látja, nagyjából melyik terület kell; az edzésfájl nem kerül fel sehova.',
+    'A térképhez a böngésződ letölti a környék domborzati és utcatérképét. A szolgáltató így látja, nagyjából melyik terület kell; az edzésfájl nem kerül fel sehova.',
 
   'video.section': 'Videó',
   'video.length': 'Hossz',

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { FlyoverPath } from '../src/domain/map/FlyoverPath';
 import { LiveStats } from '../src/domain/map/LiveStats';
 import { MapStyles } from '../src/domain/map/MapStyles';
+import { SunPosition } from '../src/domain/map/SunPosition';
 import { PrivacyZone } from '../src/domain/route/PrivacyZone';
 import { RouteShape } from '../src/domain/route/RouteShape';
 import { StatsCalculator } from '../src/domain/stats/StatsCalculator';
@@ -45,9 +46,10 @@ describe('FlyoverPath', () => {
     }
   });
 
-  it('keeps blurry imagery at a distance', () => {
-    const satellite = new FlyoverPath(route.geo, 1080 / 1920, MapStyles.closestCamera('satellite'));
-    expect(satellite.shotAt(0.5).distance).toBeGreaterThanOrEqual(1800);
+  it('keeps the chase camera close enough for the hills to show', () => {
+    const distance = path.shotAt(0.5).distance;
+    expect(distance).toBeGreaterThanOrEqual(450);
+    expect(distance).toBeLessThanOrEqual(1200);
   });
 
   it('draws the route up to the current point, with coloring values alongside', () => {
@@ -83,21 +85,68 @@ describe('MapStyles', () => {
     layers: [
       { id: 'background', type: 'background' },
       { id: 'water', type: 'fill', source: 'x' },
-      { id: 'highway_minor', type: 'line', source: 'x' },
+      { id: 'building', type: 'fill', source: 'x', 'source-layer': 'building' },
+      { id: 'highway_minor', type: 'line', source: 'x', paint: { 'line-color': '#181818' } },
       { id: 'highway_name_other', type: 'symbol', source: 'x' },
       { id: 'place_city', type: 'symbol', source: 'x' },
     ],
   };
+  const look = MapStyles.look(route.geo, ride.startTime);
 
-  it('adds terrain and shading to the dark map, and drops label clutter', () => {
-    const style = MapStyles.build('dark', base);
+  it('keeps the street map for images, with terrain and shading, and drops label clutter', () => {
+    const style = MapStyles.build('streets', base, look);
     const ids = style.layers.map((l) => l.id);
-    expect(style.terrain?.source).toBe('terrain');
-    expect(ids).toEqual(['background', 'water', 'shading', 'highway_minor', 'place_city']);
+    expect(style.terrain).toEqual({ source: 'terrain', exaggeration: look.exaggeration });
+    expect(ids).toEqual([
+      'background',
+      'water',
+      'building',
+      'shading',
+      'highway_minor',
+      'place_city',
+    ]);
   });
 
-  it('builds the satellite map without downloading a base style', () => {
-    expect(MapStyles.build('satellite').sources).toHaveProperty('satellite');
+  it('gives videos lighter streets and 3D buildings', () => {
+    const style = MapStyles.build('night', base, look);
+    const ids = style.layers.map((l) => l.id);
+    expect(ids).toEqual([
+      'background',
+      'water',
+      'building-3d',
+      'shading',
+      'highway_minor',
+      'place_city',
+    ]);
+    expect(style.layers.find((l) => l.id === 'building-3d')?.type).toBe('fill-extrusion');
+    const road = style.layers.find((l) => l.id === 'highway_minor');
+    expect(road?.type === 'line' && road.paint?.['line-color']).not.toBe('#181818');
+  });
+
+  it('adds the elevation colors under the shading on the neon map', () => {
+    const ids = MapStyles.build('neon', base, look).layers.map((l) => l.id);
+    expect(ids).toContain('relief');
+    expect(ids.indexOf('relief')).toBeLessThan(ids.indexOf('shading'));
+  });
+
+  it('lights the dawn map from the sun, with a moonlight fallback at night', () => {
+    // Budapest, summer noon: sun high in the south
+    const noon = SunPosition.at(new Date('2024-06-21T11:00:00Z'), 47.5, 19.05);
+    expect(noon.azimuth).toBeGreaterThan(160);
+    expect(noon.azimuth).toBeLessThan(200);
+    expect(noon.altitude).toBeGreaterThan(60);
+    // Sunrise side in the morning
+    const morning = SunPosition.at(new Date('2024-06-21T04:30:00Z'), 47.5, 19.05);
+    expect(morning.azimuth).toBeGreaterThan(50);
+    expect(morning.azimuth).toBeLessThan(100);
+
+    expect(MapStyles.lighting(noon).altitude).toBe(55);
+    const midnight = SunPosition.at(new Date('2024-06-21T22:00:00Z'), 47.5, 19.05);
+    expect(MapStyles.lighting(midnight)).toEqual({ direction: 315, altitude: 30 });
+  });
+
+  it('lifts flat terrain more than mountains', () => {
+    expect(MapStyles.exaggeration(40)).toBeGreaterThan(MapStyles.exaggeration(2000));
   });
 });
 

@@ -3,7 +3,7 @@ import type { SportType } from '../activity/SportType';
 import { Graphemes } from '../format/Graphemes';
 import type { StatId } from '../format/StatPresenter';
 import type { RouteColoring } from '../route/RouteShape';
-import type { MapStyleId } from '../map/MapStyles';
+import { MapStyles, type VideoStyleId } from '../map/MapStyles';
 import { PhotoPlacement, type PhotoSettings } from './PhotoPlacement';
 import { PosterFonts, type FontId } from './PosterFont';
 import type { PosterFormatId } from './PosterFormat';
@@ -40,8 +40,8 @@ export interface PosterDesign {
   photo: PhotoSettings;
   /** What fills the background behind the text */
   background: BackgroundKind;
-  /** Look of the 3D map (image background and video) */
-  mapStyle: MapStyleId;
+  /** Look of the 3D map in videos (images always use the street map) */
+  mapStyle: VideoStyleId;
   /** Length of the flyover video, seconds */
   videoSeconds: number;
 }
@@ -58,8 +58,7 @@ export type PosterStyle = Omit<
 export type RememberedDesign = Partial<PosterStyle> & { stats?: StatId[]; statsSport?: SportType };
 
 const PREFERRED_STATS: Record<SportType, StatId[]> = {
-  // Runners get km/h next to pace by default; it's what they asked to see
-  run: ['distance', 'avgPace', 'avgSpeed', 'movingTime', 'elevationGain'],
+  run: ['distance', 'avgPace', 'movingTime', 'elevationGain', 'avgHeartRate'],
   ride: ['distance', 'avgSpeed', 'movingTime', 'elevationGain'],
   other: ['distance', 'movingTime', 'avgSpeed', 'elevationGain'],
 };
@@ -101,11 +100,11 @@ export class PosterDefaults {
     showElevation: true,
     showLogo: true,
     background: 'theme',
-    mapStyle: 'dark',
-    videoSeconds: 15,
+    mapStyle: 'night',
+    videoSeconds: 20,
   };
 
-  static readonly VIDEO_LENGTHS = [10, 15, 20] as const;
+  static readonly VIDEO_LENGTHS: readonly number[] = [10, 20, 30];
 
   /**
    * A design for a newly loaded activity: its own name as title, the remembered look,
@@ -131,6 +130,13 @@ export class PosterDefaults {
         merged.background === 'map' && activity.hasGps ? 'map' : PosterDefaults.STYLE.background,
       // A font set removed in a later version falls back to the default
       fontId: PosterFonts.IDS.includes(merged.fontId) ? merged.fontId : PosterDefaults.STYLE.fontId,
+      // Same for retired map styles (satellite) and video lengths
+      mapStyle: MapStyles.VIDEO_IDS.includes(merged.mapStyle)
+        ? merged.mapStyle
+        : PosterDefaults.STYLE.mapStyle,
+      videoSeconds: PosterDefaults.VIDEO_LENGTHS.includes(merged.videoSeconds)
+        ? merged.videoSeconds
+        : PosterDefaults.STYLE.videoSeconds,
       statsSport: activity.sport,
       stats:
         sameSport && rememberedStats?.length
@@ -168,7 +174,7 @@ export class PosterDefaults {
 
   /**
    * Swaps pace ↔ speed stats in place, so a sport change keeps the user's layout.
-   * Runners may also show km/h, so a pick that already has both doesn't end up doubled.
+   * A pick that had both (older versions offered km/h to runners) doesn't end up doubled.
    */
   static adaptStats(stats: StatId[], sport: SportType): StatId[] {
     const swapped = stats.map((id) => {

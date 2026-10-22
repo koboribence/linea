@@ -3,7 +3,7 @@ import type { CameraShot } from '../../domain/map/FlyoverPath';
 import {
   DARK_STYLE_URL,
   MapStyles,
-  TERRAIN_EXAGGERATION,
+  type MapLook,
   type MapStyleId,
 } from '../../domain/map/MapStyles';
 import { offset } from '../../domain/stats/geo';
@@ -13,6 +13,8 @@ export interface MapViewOptions {
   width: number;
   height: number;
   style: MapStyleId;
+  /** Light, relief and elevation range of the route's area */
+  look: MapLook;
   /** Where the camera starts, [lon, lat] */
   center: [number, number];
 }
@@ -26,9 +28,18 @@ const METERS_PER_DEGREE = 111_320;
 
 /** Downloaded once per page; every map after that starts from memory. */
 let darkBase: Promise<StyleSpecification> | undefined;
+function loadBase(): Promise<StyleSpecification> {
+  darkBase ??= fetch(DARK_STYLE_URL).then((r) => {
+    if (!r.ok) throw new Error(`Map style: HTTP ${r.status}`);
+    return r.json() as Promise<StyleSpecification>;
+  });
+  // A failed download may be retried by the next map
+  darkBase.catch(() => (darkBase = undefined));
+  return darkBase;
+}
 
 /**
- * The 3D map (terrain, sky, imagery or vector streets), wrapped so the rest of the app only
+ * The 3D map (terrain, relief shading, sky and vector streets), wrapped so the rest of the app only
  * talks in CameraShots and coordinates. MapLibre is loaded on first use, so it costs nothing
  * until a map is shown. The route is not part of the map: project() tells where to draw it.
  */
@@ -40,21 +51,22 @@ export class MapView {
     private readonly map: MapLibreMap,
     private readonly container: HTMLElement,
     private readonly toLngLat: (coordinate: [number, number]) => LngLat,
+    /** Terrain height multiplier, so the camera aims at the raised ground */
+    private readonly exaggeration: number,
   ) {}
 
   /** Starts downloading the map code and base style early, e.g. when a map option is hovered. */
   static preload(): void {
-    darkBase ??= fetch(DARK_STYLE_URL).then((r) => r.json() as Promise<StyleSpecification>);
+    void loadBase().catch(() => undefined);
     void import('maplibre-gl');
   }
 
   static async create(parent: HTMLElement, options: MapViewOptions): Promise<MapView> {
-    darkBase ??= fetch(DARK_STYLE_URL).then((r) => r.json() as Promise<StyleSpecification>);
     const [{ Map, LngLat, setWorkerUrl }, worker, base] = await Promise.all([
       import('maplibre-gl'),
       // Bundlers move MapLibre around, so tell it where its background worker file ended up
       import('maplibre-gl/dist/maplibre-gl-worker.mjs?url'),
-      options.style === 'dark' ? darkBase : undefined,
+      loadBase(),
       import('maplibre-gl/dist/maplibre-gl.css'),
     ]);
     setWorkerUrl(worker.default);
@@ -67,7 +79,7 @@ export class MapView {
 
     const map = new Map({
       container,
-      style: MapStyles.build(options.style, base),
+      style: MapStyles.build(options.style, base, options.look),
       center: options.center,
       zoom: 12,
       interactive: false,
@@ -88,7 +100,12 @@ export class MapView {
       container.remove();
       throw error;
     }
-    return new MapView(map, container, ([lng, lat]) => new LngLat(lng, lat));
+    return new MapView(
+      map,
+      container,
+      ([lng, lat]) => new LngLat(lng, lat),
+      options.look.exaggeration,
+    );
   }
 
   get canvas(): HTMLCanvasElement {
@@ -98,7 +115,7 @@ export class MapView {
   /** Puts the camera where the shot says, never below the terrain. */
   setCamera(shot: CameraShot): void {
     const { target, distance, pitch, bearing } = shot;
-    const ground = shot.targetElevation * TERRAIN_EXAGGERATION;
+    const ground = shot.targetElevation * this.exaggeration;
     const camera = offset(target[1], target[0], bearing + 180, distance * Math.sin(pitch * RAD));
     let altitude = ground + distance * Math.cos(pitch * RAD);
 

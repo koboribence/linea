@@ -3,6 +3,7 @@ import { BRAND } from '../../brand';
 import type { Activity } from '../../domain/activity/Activity';
 import type { SportType } from '../../domain/activity/SportType';
 import { StatPresenter } from '../../domain/format/StatPresenter';
+import { MapStyles } from '../../domain/map/MapStyles';
 import { PosterDefaults, type PosterDesign } from '../../domain/poster/PosterDesign';
 import { PhotoPlacement } from '../../domain/poster/PhotoPlacement';
 import { POSTER_FORMATS } from '../../domain/poster/PosterFormat';
@@ -91,7 +92,7 @@ export function usePosterEditor(loaded: Activity, mode: 'image' | 'video' = 'ima
       }),
     [builder, activity, design, statItems, route, elevation, photo, usePhoto, useMap],
   );
-  const mapSnapshot = useMapSnapshot(useMap, route, baseScene, design.mapStyle);
+  const mapSnapshot = useMapSnapshot(useMap, route, baseScene, MapStyles.IMAGE, activity.startTime);
   const scene = useMemo(() => {
     const still = mapSnapshot.result;
     const geo = route?.geo;

@@ -1,6 +1,6 @@
 import { FlyoverPath } from '../../domain/map/FlyoverPath';
 import { MapFraming } from '../../domain/map/MapFraming';
-import { MapStyles, type MapStyleId } from '../../domain/map/MapStyles';
+import { MapStyles, type MapLook, type MapStyleId } from '../../domain/map/MapStyles';
 import type { PhotoImage } from '../../domain/poster/PosterScene';
 import type { GeoRoute } from '../../domain/route/RouteShape';
 import { MapView } from './MapView';
@@ -9,6 +9,7 @@ export interface StillRequest {
   width: number;
   height: number;
   style: MapStyleId;
+  look: MapLook;
   route: GeoRoute;
 }
 
@@ -35,11 +36,12 @@ export class StillMap {
   private queue: Promise<unknown> = Promise.resolve();
   private readonly cache = new Map<string, StillResult>();
 
-  /** Identifies what a render depends on: size, style and the route's geometry. */
-  static key({ width, height, style, route }: StillRequest): string {
+  /** Identifies what a render depends on: size, style, look and the route's geometry. */
+  static key({ width, height, style, look, route }: StillRequest): string {
     const first = route.coordinates[0];
     const last = route.coordinates.at(-1);
-    return [width, height, style, route.coordinates.length, first, last].join('|');
+    const shape = [route.coordinates.length, first, last];
+    return [width, height, style, MapStyles.lookKey(look), ...shape].join('|');
   }
 
   render(request: StillRequest): Promise<StillResult> {
@@ -62,11 +64,11 @@ export class StillMap {
   }
 
   private async renderNow(request: StillRequest, key: string): Promise<StillResult> {
-    const { width, height, style, route } = request;
-    const view = await this.viewFor(width, height, style, route.coordinates[0]!);
+    const { width, height, route } = request;
+    const view = await this.viewFor(request);
     const band = MapFraming.band(width, height);
 
-    const path = new FlyoverPath(route, width / height, MapStyles.closestCamera(style));
+    const path = new FlyoverPath(route, width / height);
     // The map's focal point moves into the band, the camera distance fits the route into it
     view.setPadding(band.top, height - band.bottom);
     view.setCamera(path.overview(STILL_PITCH, 0, (band.bottom - band.top) / height));
@@ -81,13 +83,8 @@ export class StillMap {
     return result;
   }
 
-  private async viewFor(
-    width: number,
-    height: number,
-    style: MapStyleId,
-    center: [number, number],
-  ): Promise<MapView> {
-    const viewKey = `${width}|${height}|${style}`;
+  private async viewFor({ width, height, style, look, route }: StillRequest): Promise<MapView> {
+    const viewKey = `${width}|${height}|${style}|${MapStyles.lookKey(look)}`;
     if (this.view && this.viewKey === viewKey) return this.view;
     this.view?.destroy();
     this.view = undefined;
@@ -98,7 +95,8 @@ export class StillMap {
         'position:fixed;left:0;top:0;opacity:0;pointer-events:none;z-index:-1;overflow:hidden;';
       document.body.appendChild(this.host);
     }
-    this.view = await MapView.create(this.host, { width, height, style, center });
+    const center = route.coordinates[0]!;
+    this.view = await MapView.create(this.host, { width, height, style, look, center });
     this.viewKey = viewKey;
     return this.view;
   }

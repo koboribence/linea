@@ -45,12 +45,12 @@ describe('UnitFormatter', () => {
 describe('StatPresenter', () => {
   const presenter = new StatPresenter(new UnitFormatter('hu-HU'));
 
-  it('offers pace and km/h to runners, only speed to cyclists', () => {
+  it('offers pace (min/km) to runners, km/h to cyclists', () => {
     const ids = (sport: 'run' | 'ride') =>
       presenter
         .groups(syntheticActivity(sport, [{}]), { avgSpeed: 3, maxSpeed: 4 })
         .flatMap((g) => g.items.map((i) => i.id));
-    expect(ids('run')).toEqual(['avgPace', 'bestPace', 'avgSpeed', 'maxSpeed']);
+    expect(ids('run')).toEqual(['avgPace', 'bestPace']);
     expect(ids('ride')).toEqual(['avgSpeed', 'maxSpeed']);
   });
 

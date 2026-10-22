@@ -93,7 +93,7 @@ export class PosterSceneBuilder {
       font: PosterFonts.PRESETS[design.fontId],
       // A photo fills the background, so the image can't be a transparent sticker at the same time
       transparent: design.transparent && design.background === 'theme' && !photo && !map,
-      map: map && { ...map, attribution: MapStyles.attribution(design.mapStyle) },
+      map: map && { ...map, attribution: MapStyles.attribution() },
       photo: photo && { image: photo, settings: design.photo },
       eyebrow: this.eyebrow(activity, design),
       title: design.title?.trim() || this.autoTitle(activity),

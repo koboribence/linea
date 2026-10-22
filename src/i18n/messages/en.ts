@@ -106,15 +106,14 @@ export const en: Messages = {
   'background.map': '3D map',
   'background.photo': 'Photo',
   'map.style': 'Map',
-  'mapStyle.dark': 'Dark',
-  'mapStyle.satellite': 'Satellite',
-  'mapStyle.satelliteHint':
-    'The free satellite imagery has ~10 m resolution, so it looks soft up close; in videos the camera flies higher.',
+  'mapStyle.night': 'Night',
+  'mapStyle.dawn': 'Dawn',
+  'mapStyle.neon': 'Neon',
   'map.loading': 'Loading map…',
   'map.failed': "The map couldn't be loaded. Check your internet connection.",
   'map.needsRoute': 'The 3D map needs a GPS route.',
   'map.privacy':
-    'For the map, your browser downloads satellite images of the area, so the provider sees roughly which area is needed. Your activity file is never uploaded.',
+    'For the map, your browser downloads terrain and street data of the area, so the provider sees roughly which area is needed. Your activity file is never uploaded.',
 
   'video.section': 'Video',
   'video.length': 'Length',

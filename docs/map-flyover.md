@@ -11,9 +11,8 @@ Mindkettő a böngészőben fut, szerver nélkül. A térképhez a böngésző l
 | Feladat | Eszköz | Licenc |
 |---|---|---|
 | 3D térkép | [MapLibre GL JS](https://maplibre.org) 6 | BSD-3 |
-| Sötét térkép | [OpenFreeMap](https://openfreemap.org) „dark” stílus (OpenStreetMap-adatokkal) | ODbL adat, kulcs nélkül |
-| Műholdkép | [EOxCloudless 2016](https://cloudless.eox.at) (Sentinel-2) | CC BY 4.0 (a 2018 utáni rétegek nem kereskedelmiek, ezért a 2016-os) |
-| Domborzat | AWS Terrain Tiles (Mapzen, terrarium kódolás) | nyílt adat |
+| Utcák, épületek | [OpenFreeMap](https://openfreemap.org) „dark” stílus (OpenStreetMap-adatokkal) | ODbL adat, kulcs nélkül |
+| Domborzat | [Mapterhorn](https://mapterhorn.com) (terrarium kódolás, 512 px-es csempék) | nyílt adat, kulcs nélkül |
 | Videókódolás | [Mediabunny](https://mediabunny.dev) + böngészős WebCodecs | MPL-2.0 |
 
 Minden térképes kódrész csak akkor töltődik le, amikor szükség van rá. A térképkönyvtár kb. 250 KB, a videókódoló csak a „Videó készítése” gombra.
@@ -22,7 +21,8 @@ Minden térképes kódrész csak akkor töltődik le, amikor szükség van rá. 
 
 ```
 domain/map/
-  MapStyles     a két térképstílus (sötét / műhold) + forrásmegjelölés
+  MapStyles     a térképstílusok (képhez utcás, videóhoz éjszaka / hajnal / neon) + forrásmegjelölés
+  SunPosition   a nap iránya és magassága egy időpontban és helyen (a hajnal stílus fényéhez)
   MapFraming    hová kerül az útvonal a képen (sáv a cím és az adatok között)
   FlyoverPath   a kamera mozgása t ∈ [0, 1] szerint; tiszta matematika
   LiveStats     „eddig megtett” táv és idő a videó adott pontján
@@ -37,7 +37,7 @@ ui/video/
 
 ## Fő elv: a térkép csak háttér, az útvonalat mi rajzoljuk
 
-A térkép **csak** a talajt adja: domborzat, ég, utcák vagy műholdkép. Az útvonal **nem** része a térképnek. Helyette:
+A térkép **csak** a talajt adja: domborzat, ég, utcák, épületek. Az útvonal **nem** része a térképnek. Helyette:
 
 1. A `MapView.project()` megmondja, hol vannak az útvonal pontjai a képen. A domborzat magasságát is figyelembe veszi.
 2. A meglévő poszter-rajzoló (`PosterRenderer.drawRoutePoints`) ugyanazzal a fénylő, színátmenetes vonallal, rajtkarikával és célponttal rajzolja meg, mint a 2D képen.
@@ -51,18 +51,27 @@ A kamera mögötti pontokat a `MapView` egy olcsó síkbeli számítással szűr
 
 ## Térképstílusok (`MapStyles`)
 
-| Stílus | Mit mutat | Mikor jó | Legközelebbi kamera |
-|---|---|---|---|
-| **Sötét** (alapértelmezett) | OpenFreeMap vektortérkép: utak, vizek, épületek, településnevek, domborzati árnyékolás | Bármilyen közelről éles, kis letöltés, illik a Volt arculathoz | 450 m |
-| **Műhold** | Sentinel-2 felhőmentes mozaik | Látványos nagy távolságból | 1800 m |
+Minden stílus domborzati és vektoros adatból készül, ezért bármilyen közelről éles. (Az ingyenes műholdkép kb. 10 m-es felbontású és közelről elmosódott, ezért kikerült.) A színek a témától függetlenek, így színváltáskor nem kell új térkép.
 
-**A sötét stílus átalakítása:**
-- a letöltött alapstílusból kikerülnek az utcanevek, egyirányú-nyilak, vízfeliratok és külvárosi címkék (zsúfoltak, és külön betűtípus-letöltést igényelnek);
-- bekerül a domborzati árnyékolás, a 3D domborzat (1,4× kiemeléssel) és az ég.
+| Stílus | Hol | Mit mutat |
+|---|---|---|
+| **Utcás** (`streets`) | Kép háttere (nem választható) | Sötét vektortérkép vonalas utcákkal, vizekkel, lapos épületekkel, halvány domborzati árnyékolással |
+| **Éjszaka** (alapértelmezett) | Videó | Hideg, több irányból megvilágított domborzat, kékesszürke utcák, 3D épületek |
+| **Hajnal** | Videó | A domborzatot a nap világítja meg onnan és olyan magasról, ahol az edzés kezdetén állt; meleg színek |
+| **Neon** | Videó | A magasság szerint színezett terep (sötétkék → lila → rózsaszín → narancs), lila utcák, 3D épületek |
 
-**Műhold korlátja:** az ingyenes műholdkép felbontása kb. 10 m/pixel, ezért közelről elmosódott. Emiatt a videón a kamera magasabbról filmez. Éles, nagy felbontású műholdkép csak API-kulcsos (fizetős vagy regisztrációhoz kötött) szolgáltatótól érhető el, például MapTiler, Mapbox vagy Google.
+**Az alapstílus átalakítása:**
+- kikerülnek az utcanevek, egyirányú-nyilak, vízfeliratok és külvárosi címkék (zsúfoltak, és külön betűtípus-letöltést igényelnek);
+- a domborzati rétegek a vonalak és feliratok alá kerülnek;
+- **videóban** az utcák középvonala a stílus világos színét kapja, a lapos épületeket pedig 3D-s (`fill-extrusion`) épületek váltják a valódi magasságukkal (`render_height`), 13-as szinttől. A követő kamera elég alacsonyan repül ahhoz, hogy ezek látszódjanak.
 
-**Domborzat:** a domborzati adat legfeljebb 12-es nagyítási szintig töltődik le (kb. 30 m-es részletesség). A 3D formához ennyi elég, és töredék annyi csempe kell hozzá.
+**Domborzat kiemelése (`MapStyles.exaggeration`):** az útvonal magasságkülönbségéből jön: síkvidéken erősebb (60 m alatt 3×), hegyekben gyengébb (1000 m fölött 1,3×), hogy a dombok látsszanak, de a hegyek ne legyenek tüskék. A `MapView` ezzel számolja a célpont talajmagasságát.
+
+**Napállás (`SunPosition`):** tömör csillagászati közelítés (kb. 1°-os pontosság). A fény magassága 20° és 55° közé van szorítva (alacsony napnál minden fekete, magasnál minden lapos). Ha a nap a horizont alatt volt, vagy nincs időpont, hűvös „holdfény” jön északnyugatról, 30°-ról.
+
+**Domborzat:** a domborzati adat legfeljebb 13-as szintig töltődik le (512 px-es csempe, ez kb. a 256 px-es 14-es szint részletessége). A 3D formához és az árnyékoláshoz külön forrás tartozik, mert a közös forrás árnyékolása gyengébb; a böngésző gyorsítótára miatt a csempék így is csak egyszer töltődnek le.
+
+**Kipróbált, de elvetett:** szintvonalak (maplibre-contour). Látványosak voltak, de a felhasználó utcákat és épületeket kért helyettük, és lapos terepen lassították a térképet.
 
 ## Állókép (`StillMap`)
 
@@ -70,14 +79,15 @@ A kamera mögötti pontokat a `MapView` egy olcsó síkbeli számítással szűr
 - **Gyorsítótár:** az utolsó 4 eredmény megmarad (kép + kivetített pontok). A formátumok közötti oda-vissza váltás azonnali.
 - **Sorba állítás:** a renderek egymás után futnak, mert ugyanazt a térképet használják.
 - **Rögzített kamera:** 50°-os dőlés, észak felül. A dőlés és a forgatás szándékosan nem állítható, mert minden változtatás új térképet kérne.
-- **Kulcs:** méret, stílus és az útvonal geometriája (`StillMap.key`). Más nem számít.
+- **Kulcs:** méret, stílus, a térkép „kinézete” (`MapStyles.lookKey`: fény, kiemelés, magasságtartomány) és az útvonal geometriája (`StillMap.key`). Más nem számít.
 - **Átmenet:** amíg az új térkép készül, a régi csak akkor marad látható, ha ugyanakkora, és az útvonal pontjai is egyeznek. Különben az útvonal elcsúszna rajta.
 
 **Mért idők** (szoftveres 3D-rajzolóval, tehát a legrosszabb esetben):
 
 | Művelet | Idő |
 |---|---|
-| Első sötét térkép, Story | kb. 3,7 mp |
+| Első térkép, Story (valódi videókártyán, hálózattal) | kb. 1,3–1,9 mp |
+| Első sötét térkép, Story (szoftveres rajzolás, korábbi mérés) | kb. 3,7 mp |
 | Formátumváltás | kb. 1,1 mp |
 | Visszaváltás egy már látott formátumra | 2 ms |
 | Színváltás | nincs újrarenderelés |
@@ -128,7 +138,7 @@ Egy korábbi próbálkozás az irányokat egy ablakban átlagolta. Ez oda-vissza
 - a célpont mögött, a dőlésnek megfelelő magasságban áll, és `calculateCameraOptionsFromTo`-val néz a célpontra;
 - ha a kamera alatti terep magasabb lenne, a kamera legalább 80 m-rel fölé emelkedik.
 
-**Követési távolság:** az útvonal hosszának 6%-a, 2500 m-es felső korláttal, és a stílus szerinti alsó korláttal (lásd fent).
+**Követési távolság:** az útvonal hosszának 3%-a, legalább 450 m, legfeljebb 1200 m. Közelebb, mint korábban, hogy az utcák és az épületek látszódjanak.
 
 ## Videó: élő adatok és felirat
 
@@ -156,7 +166,7 @@ Képkockánként, nem valós időben:
 **Formátum:**
 - **Kodek:** H.264 / MP4, ha a böngésző tudja (ez kell az Instagramnak); különben VP9 / WebM.
 - **Felbontás:** 30 fps, a választott formátum mérete (pl. 1080×1920).
-- **Hossz:** 10, 15 vagy 20 mp.
+- **Hossz:** 10, 20 vagy 30 mp (alapból 20). Egy régebbi, már nem létező hossz (pl. 15) mentve az alapértékre áll vissza.
 
 **Ellenőrizve:** egy 1 mp-es próbavideó szabályos MP4 (`ftyp isom`) lett.
 
@@ -169,7 +179,7 @@ Képkockánként, nem valós időben:
 - **Kevesebb újrarajzolás:** az útvonal saját rajzolóval készül, a térkép csak háttér. Így a stílus változása nem kér új térképet.
 - **Kevesebb újraindítás:** egy életben tartott állókép-térkép, csempe-gyorsítótárral és eredmény-gyorsítótárral.
 - **Kevesebb újrarenderelés:** rögzített kamera és rögzített keretezés, ezért a szöveg változása sem indít új térképet.
-- **Kevesebb letöltés:** a domborzati adat legfeljebb 12-es szintig; nincs külön árnyékoló adatkészlet a műholdnál; a sötét stílusból kikerültek a felesleges feliratok.
+- **Kevesebb letöltés:** a domborzati adat legfeljebb 13-as szintig, 512 px-es csempékben; az alapstílusból kikerültek a felesleges feliratok.
 - **Gyorsabb első betöltés:** előre megnyitott kapcsolat (`preconnect`) a térkép-szolgáltatókhoz az `index.html`-ben; előtöltés, amikor az egér a „Kép | Videó” vagy a háttérválasztó fölé ér (`MapView.preload`).
 - **Lusta betöltés:** a térkép- és videókódot csak akkor tölti le a böngésző, amikor kell.
 - **Olcsó kamera-számítás:** előre kiszámolt irány-sáv; képkockánként csak kiolvasás.
@@ -177,19 +187,18 @@ Képkockánként, nem valós időben:
 ## Forrásmegjelölés
 
 A licencek előírják, ezért minden térképes képen és videón ott van, a logó alatt, kis, de olvasható betűvel:
-- **Sötét:** „© OpenStreetMap contributors · OpenFreeMap · OpenMapTiles · Terrain: Mapzen, AWS Open Data”;
-- **Műhold:** az EOxCloudless szövege és a domborzati forrás.
+„© OpenStreetMap contributors · OpenFreeMap · OpenMapTiles · Terrain: © Mapterhorn” (minden stílusnál ugyanez).
 
 ## Tesztek
 
 | Tesztfájl | Mit ellenőriz |
 |---|---|
-| [map.test.ts](../tests/map.test.ts) | Földrajzi segédfüggvények; a kamera szakaszai, simasága (legfeljebb 6°/képkocka) és a műhold távolsága; a részleges útvonal; az élő adatok növekedése és korlátja; a sötét stílus átalakítása; az útvonal darabolása. |
+| [map.test.ts](../tests/map.test.ts) | Földrajzi segédfüggvények; a kamera szakaszai, simasága (legfeljebb 6°/képkocka) és követési távolsága; a részleges útvonal; az élő adatok növekedése és korlátja; az utcás és a videós stílusok rétegei (3D épületek, világos utcák, neon színezés); a napállás és a fény; a domborzat kiemelése; az útvonal darabolása. |
 
-**Böngészős ellenőrzés:** a térképes rész WebGL-t igényel, ezért valódi böngészőben ellenőriztük. Mindkét stílusban kipróbáltuk az állóképet és a videó-előnézet több időpontját, valamint egy rövid MP4 elkészítését.
+**Böngészős ellenőrzés:** a térképes rész WebGL-t igényel, ezért valódi böngészőben ellenőriztük. Az utcás állóképet és mindhárom videós stílus több időpontját kipróbáltuk egy kerékpáros (41 km) és egy futós (4,7 km, kertvárosi) fájllal; korábban egy rövid MP4 elkészítését is.
 
 ## Ismert korlátok
 
-- **Műholdkép felbontása:** az ingyenes kép kb. 10 m-es, közelről elmosódott.
+- **Épületek:** csak ott vannak, ahol az OpenStreetMap-ben fel vannak rajzolva; magasság híján 6 m-esek.
 - **Takarás:** a mi rajzunk nem tudja, ha az útvonalat egy hegy eltakarja; a vonal ilyenkor a hegy előtt látszik.
 - **Videókészítés ideje:** tovább tart, mint a videó hossza (képkockánként vár a térképre). Valódi videókártyán ez elfogadható, szoftveres rajzolással lassú.

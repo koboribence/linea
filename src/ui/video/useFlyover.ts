@@ -52,14 +52,12 @@ export function useFlyover(
   const style = design.mapStyle;
 
   const path = useMemo(
-    () =>
-      new FlyoverPath(
-        route.geo,
-        width / height,
-        MapStyles.closestCamera(style),
-        MapFraming.share(width, height),
-      ),
-    [route, width, height, style],
+    () => new FlyoverPath(route.geo, width / height, undefined, MapFraming.share(width, height)),
+    [route, width, height],
+  );
+  const look = useMemo(
+    () => MapStyles.look(route.geo, activity.startTime),
+    [route, activity.startTime],
   );
   const live = useMemo(
     () => new LiveStats(route.geo, path, activity.startTime?.getTime()),
@@ -67,7 +65,7 @@ export function useFlyover(
   );
   const presenter = useMemo(() => new StatPresenter(format), [format]);
 
-  // The live map; rebuilt only when its size or style changes. Colors, text and the route are
+  // The live map; rebuilt only when its size, style or route changes. Colors, text and the route are
   // drawn on top by our renderer, so changing them never reloads the map.
   const [view, setView] = useState<MapView>();
   const [mapFailed, setMapFailed] = useState(false);
@@ -77,7 +75,7 @@ export function useFlyover(
     if (!host) return;
     let cancelled = false;
     let created: MapView | undefined;
-    MapView.create(host, { width, height, style, center: start })
+    MapView.create(host, { width, height, style, look, center: start })
       .then((mapView) => {
         if (cancelled) return mapView.destroy();
         created = mapView;
@@ -95,7 +93,7 @@ export function useFlyover(
     };
     // The start point only matters for the very first camera position
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hostRef, width, height, style]);
+  }, [hostRef, width, height, style, look]);
 
   const moveTo = useCallback((t: number) => view?.setCamera(path.shotAt(t)), [view, path]);
 

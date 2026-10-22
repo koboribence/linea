@@ -8,7 +8,7 @@ interface MapStylePickerProps {
   update: (changes: Partial<PosterDesign>) => void;
 }
 
-/** Dark vector map (sharp at any distance) or satellite imagery (soft up close). */
+/** The three video looks: night, dawn light and neon relief. */
 export function MapStylePicker({ design, update }: MapStylePickerProps) {
   const { i18n } = useLocale();
   return (
@@ -16,13 +16,10 @@ export function MapStylePicker({ design, update }: MapStylePickerProps) {
       <span className="field__label">{i18n.t('map.style')}</span>
       <Segmented
         label={i18n.t('map.style')}
-        options={MapStyles.IDS.map((id) => ({ value: id, label: i18n.t(`mapStyle.${id}`) }))}
+        options={MapStyles.VIDEO_IDS.map((id) => ({ value: id, label: i18n.t(`mapStyle.${id}`) }))}
         value={design.mapStyle}
         onChange={(mapStyle) => update({ mapStyle })}
       />
-      {design.mapStyle === 'satellite' && (
-        <p className="field__hint">{i18n.t('mapStyle.satelliteHint')}</p>
-      )}
     </div>
   );
 }

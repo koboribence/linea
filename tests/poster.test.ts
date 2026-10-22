@@ -18,7 +18,6 @@ describe('PosterDefaults', () => {
     expect(PosterDefaults.defaultStats('run', [...all])).toEqual([
       'distance',
       'avgPace',
-      'avgSpeed',
       'movingTime',
       'elevationGain',
     ]);
@@ -65,8 +64,18 @@ describe('stat picks per sport', () => {
       stats,
     ).stats;
 
-  it('shows km/h to runners by default, next to pace', () => {
-    expect(runner()).toEqual(['distance', 'avgPace', 'avgSpeed', 'movingTime', 'elevationGain']);
+  it('shows pace (min/km) to runners by default, not km/h', () => {
+    expect(runner()).toEqual(['distance', 'avgPace', 'movingTime', 'elevationGain']);
+  });
+
+  it('falls back from retired map styles and video lengths', () => {
+    const design = PosterDefaults.create(
+      new Activity({ sport: 'run', sourceFormat: 'gpx' }, [{ lat: 47, lon: 19 }]),
+      ['distance'],
+      { mapStyle: 'satellite' as never, videoSeconds: 15 },
+    );
+    expect(design.mapStyle).toBe(PosterDefaults.STYLE.mapStyle);
+    expect(design.videoSeconds).toBe(20);
   });
 
   it('carries picks over only from the same sport', () => {
@@ -133,7 +142,7 @@ describe('PosterSceneBuilder', () => {
     };
 
     const scene = builder.build({ activity: run, design, statItems: items, brandName: 'Linea' });
-    expect(scene.stats.map((s) => s.label)).toEqual(['Átlagtempó', 'Táv']);
+    expect(scene.stats.map((s) => s.label)).toEqual(['Átlagsebesség', 'Táv']);
     expect(scene.stats[1]).toMatchObject({ value: '4,69', unit: 'km' });
     expect(scene.width).toBe(1080);
   });
