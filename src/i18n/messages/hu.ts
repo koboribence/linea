@@ -8,6 +8,7 @@ export const hu = {
   'drop.browse': 'Fájl kiválasztása',
   'drop.privacy': 'A fájl a böngésződben marad, nem töltjük fel sehova.',
   'drop.loading': 'Beolvasás…',
+  'drop.another': 'Másik fájl',
   'drop.release': 'Engedd el a fájlt',
 
   'error.unsupported': 'Ezt a fájltípust nem ismerjük. FIT, GPX vagy TCX fájlt húzz ide.',
@@ -83,6 +84,18 @@ export const hu = {
 
   'nav.back': 'Vissza',
   'nav.backLabel': 'Vissza a fájlfeltöltéshez',
+
+  'photo.section': 'Háttérkép',
+  'photo.hint': 'A kép a böngésződben marad, nem töltjük fel sehova.',
+  'photo.add': 'Kép hozzáadása',
+  'photo.overlay': 'Overlay erőssége',
+  'photo.zoom': 'Nagyítás',
+  'photo.dragHint': 'A kép helyzetét az előnézeten húzással állíthatod, vagy a nyilakkal.',
+  'photo.center': 'Középre',
+  'photo.replace': 'Csere',
+  'photo.remove': 'Eltávolítás',
+  'photo.error': 'Ezt a képet nem sikerült megnyitni. Próbáld JPG vagy PNG formátumban.',
+  'photo.panLabel': 'Előnézet: húzd a háttérképet, vagy mozgasd a nyilakkal',
 
   'editor.text': 'Szöveg',
   'editor.title': 'Cím',

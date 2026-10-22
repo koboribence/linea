@@ -10,6 +10,7 @@ import type { MessageKey } from '../../i18n/messages/hu';
 import { Section } from '../controls/Section';
 import { Segmented } from '../controls/Segmented';
 import { Toggle } from '../controls/Toggle';
+import { PhotoPicker } from './PhotoPicker';
 import { StatPicker } from './StatPicker';
 import { ThemePicker } from './ThemePicker';
 
@@ -24,6 +25,9 @@ interface EditorPanelProps {
   hasRoute: boolean;
   hasElevation: boolean;
   autoTitle: string;
+  hasPhoto: boolean;
+  onPickPhoto: (file: File) => Promise<boolean>;
+  onRemovePhoto: () => void;
 }
 
 const SPORTS: SportType[] = ['run', 'ride', 'other'];
@@ -57,7 +61,17 @@ export function EditorPanel(props: EditorPanelProps) {
       </Section>
 
       <Section title={t('editor.colors')}>
-        <ThemePicker design={design} update={update} />
+        <ThemePicker design={design} update={update} hasPhoto={props.hasPhoto} />
+      </Section>
+
+      <Section title={t('photo.section')} hint={props.hasPhoto ? undefined : t('photo.hint')}>
+        <PhotoPicker
+          hasPhoto={props.hasPhoto}
+          settings={design.photo}
+          onChange={(photo) => update({ photo })}
+          onPick={props.onPickPhoto}
+          onRemove={props.onRemovePhoto}
+        />
       </Section>
 
       <Section title={t('editor.text')}>

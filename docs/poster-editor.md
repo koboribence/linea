@@ -40,6 +40,8 @@ Három réteg, mindegyik egy dologért felel:
 | [ui/editor/EditorScreen.tsx](../src/ui/editor/EditorScreen.tsx), [EditorPanel.tsx](../src/ui/editor/EditorPanel.tsx), [ThemePicker.tsx](../src/ui/editor/ThemePicker.tsx), [StatPicker.tsx](../src/ui/editor/StatPicker.tsx) | A felület. |
 | [ui/editor/PosterCanvas.tsx](../src/ui/editor/PosterCanvas.tsx) | Élő előnézet. |
 | [ui/editor/PosterExporter.ts](../src/ui/editor/PosterExporter.ts) | Letöltés PNG-ként, megosztás a rendszer megosztás-menüjével. |
+| [poster/PhotoPlacement.ts](../src/domain/poster/PhotoPlacement.ts) | Háttérkép-beállítások (overlay, nagyítás, helyzet), kitöltő illesztés és húzás. |
+| [ui/editor/PhotoLoader.ts](../src/ui/editor/PhotoLoader.ts), [PhotoPicker.tsx](../src/ui/editor/PhotoPicker.tsx) | Fotó betöltése és a „Háttérkép” szakasz vezérlői. |
 | [ui/editor/DesignStorage.ts](../src/ui/editor/DesignStorage.ts) | A stílus megjegyzése a következő fájlhoz. |
 | [poster/ThemeCode.ts](../src/domain/poster/ThemeCode.ts) | Saját színpár ↔ rövid kód (`v1-0e0f12-d4ff3a`) linkhez és QR-kódhoz. |
 | [format/Graphemes.ts](../src/domain/format/Graphemes.ts) | Szöveghossz látható karakterekben: egy emoji egy karakter, és soha nem vágódik ketté. |
@@ -63,8 +65,16 @@ Három réteg, mindegyik egy dologért felel:
 | `privacyMeters` | Elrejtett táv az útvonal két végén: 0, 200, 500 vagy 1000 m | `200` |
 | `showElevation` | Magasságprofil | `true` |
 | `showLogo` | Logó a kép alján | `true` |
+| `photo` | Háttérkép beállításai: `overlay` (0–1), `zoom` (1–3), `posX`/`posY` (0–1). Csak betöltött képnél számít | overlay 55%, középre |
 
-**`PosterStyle`:** a terv a `title` és a `stats` nélkül. A [DesignStorage](../src/ui/editor/DesignStorage.ts) ezt menti a `localStorage`-ba, így a következő fájl ugyanazzal a kinézettel nyílik meg. Az edzés adata soha nem kerül tárolásra.
+**Mi marad meg a következő fájlnál (`RememberedDesign`):** a [DesignStorage](../src/ui/editor/DesignStorage.ts) a `localStorage`-ba menti a teljes kinézetet (`PosterStyle`) és a kiválasztott adatokat. A cím és a háttérkép nem marad meg: a cím az új fájl nevéből jön, a kép pedig egy adott edzéshez tartozik. Az edzés adatai és a fotó soha nem kerülnek tárolásra.
+
+**Adatok átvitele (`carryOverStats`):**
+- az előző fájl adatai közül azok maradnak, amelyek az új edzésben is megvannak;
+- futás és bringa között a tempó és a sebesség párban cserélődik;
+- ami hiányzik, azt az alapértelmezett lista pótolja, ugyanannyi adatig.
+
+Ismeretlen vagy régi azonosítók a tárolóból egyszerűen kimaradnak.
 
 ### Cím
 
@@ -137,6 +147,19 @@ Minden téma `ThemeColors` értékeket ad:
 - **Saját háttér:** a szöveg színe a háttér fényerejétől függően automatikusan sötét vagy világos lesz, a `muted` pedig ebből keverődik.
 - **Saját kiemelő szín:** az `accentSoft` a kiemelő szín és a háttér keveréke.
 
+## Háttérkép
+
+1. **Betöltés:** a „Háttérkép” szakaszban választható fotó. A [PhotoLoader](../src/ui/editor/PhotoLoader.ts) `createImageBitmap`-pel dekódolja; a telefonos fotók EXIF-elforgatását is alkalmazza (`imageOrientation: 'from-image'`). A 2400 px-nél nagyobb oldalú képet lekicsinyíti, hogy az újrarajzolás gyors maradjon. Ha a böngésző nem tudja megnyitni (pl. HEIC egyes rendszereken), hibaüzenet jelenik meg.
+2. **Kitöltés:** a [PhotoPlacement.rect](../src/domain/poster/PhotoPlacement.ts) a képet mindig a teljes posztert kitöltő méretre számolja (mint a CSS `object-fit: cover`), majd a `zoom`-mal nagyít. A `posX`/`posY` (0–1) adja meg, a túllógó részből mennyi esik a bal, illetve a felső oldalra. Ezért húzással sem jöhet létre üres sáv.
+3. **Overlay:** a kép fölé a téma háttér-színátmenete kerül `overlay` átlátszósággal: 0 = csak a fotó, 1 = csak a téma színe. Így a téma és a saját színek képpel is működnek. A szövegek fotón finom árnyékot kapnak.
+4. **Helyzet:**
+   - az előnézetet egérrel vagy ujjal húzva (`PhotoPlacement.pan`, a mozgás képernyőpixelből posztertpixelbe váltva);
+   - fókuszált előnézeten a nyilakkal, 24 px-es lépésben.
+   A „Középre” gomb visszaállítja a nagyítást és a helyzetet.
+5. **Átlátszó mód:** képpel nem kombinálható; ilyenkor a kapcsolója eltűnik.
+
+**A kép és az adatvédelem:** a dekódolt kép csak a memóriában van (`usePosterEditor`). Nem kerül a `localStorage`-ba, és a megosztólinkba sem. Cserekor vagy a szerkesztő bezárásakor a memória azonnal felszabadul (`ImageBitmap.close()`).
+
 ## Saját színek mentése és küldése telefonra
 
 1. **Mentés:** ha a felhasználó saját háttér- vagy kiemelő színt állít be, megjelenik a „Színek mentése” gomb. A [ThemeLibrary](../src/ui/themes/ThemeLibrary.ts) a `localStorage`-ban tárolja a párt (legfeljebb 6 db, a legújabb elöl), és „Saját” mintaként a témák mellé kerül.
@@ -185,7 +208,7 @@ A rajzoló két lépésben dolgozik: a `layout()` kiszámolja a dobozokat, a `dr
 ## Felület
 
 - **Navigáció:**
-  - **A két képernyő:** a feltöltőoldal és a szerkesztő; betöltés után a feltöltőmező eltűnik.
+  - **A két képernyő:** a feltöltőoldal és a szerkesztő. A szerkesztő tetején egy kicsi feltöltőmező marad, amellyel másik fájl húzható be vagy választható ki. Telefonon ebből csak a „Másik fájl” gomb látszik. Ha az új fájl hibás, a hibaüzenet ott jelenik meg, és a szerkesztő a helyén marad.
   - **Visszalépés:** a fejlécben „← Vissza” gomb visz vissza.
   - **Böngészőelőzmény:** belépéskor a szerkesztő egy előzmény-bejegyzést kap (`useBackNavigation`, History API, külön router-könyvtár nélkül), így a böngésző és a telefon vissza gombja is a feltöltőoldalra visz.
 - **Elrendezés:**
@@ -197,7 +220,7 @@ A rajzoló két lépésben dolgozik: a `layout()` kiszámolja a dobozokat, a `dr
   - statisztika: csak sportváltáskor;
   - útvonal-geometria: csak a privacy zone vagy a színezés változásakor;
   - minden más csak a jelenetet építi újra.
-- **Új fájl:** az `EditorScreen` új `key`-t kap, így minden fájl a saját alapértékeivel nyílik meg, a megjegyzett stílussal.
+- **Új fájl:** az `EditorScreen` új `key`-t kap. A cím az új fájlból jön, a kinézet és a kiválasztott adatok pedig a megjegyzett tervből (lásd fent).
 - **Beállítások szakaszai:** Formátum · Színek · Szöveg · Adatok a képen · Útvonal · Egyéb (sportág, logó). Csak az a beállítás jelenik meg, amelyhez van adat (pl. magasságprofil, privacy zone GPS nélkül nincs).
 - **Export:**
   - **Letöltés:** `canvas.toBlob('image/png')`, a fájl neve `linea-ÉÉÉÉ-HH-NN.png`. Kb. 80 ms.
@@ -224,6 +247,7 @@ A felület a `PosterTheme.IDS` alapján magától megjeleníti.
 | [route.test.ts](../tests/route.test.ts) | Privacy zone, egyszerűsítés, vetítés (észak felül), doboz-illesztés, magasságprofil. |
 | [poster.test.ts](../tests/poster.test.ts) | Alapértelmezett adatok, tempó ↔ sebesség csere, téma-kontraszt, automatikus cím, jelenetépítés. |
 | [themes.test.ts](../tests/themes.test.ts) | Színkód oda-vissza alakítása és hibás kódok elutasítása, emojis karakterszámolás, cím a fájlnévből. |
+| [photo.test.ts](../tests/photo.test.ts) | Háttérkép kitöltése, húzás (rés nélkül), nagyítás utáni függőleges mozgatás; adatok átvitele a következő fájlra. |
 
 **Ellenőrzés:** a rajzolást (canvas) a jsdom nem tudja futtatni, ezért valódi böngészőben ellenőriztük, mind a három formátummal, beltéri és átlátszó esetekkel.
 
@@ -231,7 +255,7 @@ A felület a `PosterTheme.IDS` alapján magától megjeleníti.
 
 - **Kötött elrendezés:** az elemek egyelőre nem húzhatók szabadon; az elrendezést a rajzoló számolja (ez a 4. szakasz része lehet).
 - **Nincs térkép:** az útvonal térképalap nélkül jelenik meg (6. szakasz).
-- **Saját fotó** háttérnek még nem tölthető fel; az átlátszó PNG-t lehet egy másik appban a fotóra tenni.
+- **Háttérkép és új fájl:** a háttérkép nem marad meg új fájl betöltésekor; minden edzéshez újra kell választani.
 - **Mértékegység:** csak metrikus.
 - **Link fejlesztés közben:** a megosztólink az oldal saját címére mutat. Fejlesztés közben ez `localhost`, ami telefonról nem érhető el. Ilyenkor a `npx vite --host` paranccsal a gép helyi hálózati címén indítsd a szervert, és onnan nyisd meg az oldalt.
 - **Mentett színek:** csak a szín-pár menthető; a teljes sablon (formátum, adatok, elrendezés) megosztása még nincs kész.

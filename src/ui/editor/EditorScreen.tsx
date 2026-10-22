@@ -25,7 +25,12 @@ export function EditorScreen({ activity: loaded }: { activity: Activity }) {
   return (
     <div className="editor">
       <div className="editor__preview">
-        <PosterCanvas scene={editor.scene} canvasRef={canvasRef} />
+        <PosterCanvas
+          scene={editor.scene}
+          canvasRef={canvasRef}
+          onPan={editor.hasPhoto ? editor.panPhoto : undefined}
+          panLabel={i18n.t('photo.panLabel')}
+        />
         <div className="editor__actions">
           <button
             type="button"
@@ -61,6 +66,9 @@ export function EditorScreen({ activity: loaded }: { activity: Activity }) {
           hasRoute={editor.hasRoute}
           hasElevation={editor.hasElevation}
           autoTitle={editor.autoTitle}
+          hasPhoto={editor.hasPhoto}
+          onPickPhoto={editor.setPhoto}
+          onRemovePhoto={editor.removePhoto}
         />
       </div>
     </div>

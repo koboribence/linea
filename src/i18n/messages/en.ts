@@ -9,6 +9,7 @@ export const en: Messages = {
   'drop.browse': 'Choose file',
   'drop.privacy': 'Your file stays in your browser. Nothing is uploaded.',
   'drop.loading': 'Reading…',
+  'drop.another': 'Another file',
   'drop.release': 'Release to open',
 
   'error.unsupported': "We don't recognize this file type. Drop a FIT, GPX or TCX file.",
@@ -83,6 +84,18 @@ export const en: Messages = {
 
   'nav.back': 'Back',
   'nav.backLabel': 'Back to file upload',
+
+  'photo.section': 'Background photo',
+  'photo.hint': 'The photo stays in your browser. Nothing is uploaded.',
+  'photo.add': 'Add photo',
+  'photo.overlay': 'Overlay strength',
+  'photo.zoom': 'Zoom',
+  'photo.dragHint': 'Drag the photo on the preview to position it, or use the arrow keys.',
+  'photo.center': 'Center',
+  'photo.replace': 'Replace',
+  'photo.remove': 'Remove',
+  'photo.error': "This image couldn't be opened. Try a JPG or PNG.",
+  'photo.panLabel': 'Preview: drag the background photo or move it with the arrow keys',
 
   'editor.text': 'Text',
   'editor.title': 'Title',

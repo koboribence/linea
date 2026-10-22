@@ -1,14 +1,18 @@
-import type { PosterDesign, PosterStyle } from '../../domain/poster/PosterDesign';
+import type { PosterDesign, RememberedDesign } from '../../domain/poster/PosterDesign';
 import type { CustomTheme } from '../../domain/poster/ThemeCode';
 
 const STORAGE_KEY = 'poster-style';
 
-/** Remembers the look (format, colors, toggles) for the next file. Never the activity's data. */
+/**
+ * Remembers the look (format, colors, toggles) and the picked stats for the next file.
+ * Never the title or any of the activity's data.
+ */
 export class DesignStorage {
-  static load(): Partial<PosterStyle> | undefined {
+  /** Unknown stat ids in old or edited storage are harmless: only available stats are used. */
+  static load(): RememberedDesign | undefined {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? (JSON.parse(raw) as Partial<PosterStyle>) : undefined;
+      return raw ? (JSON.parse(raw) as RememberedDesign) : undefined;
     } catch {
       return undefined; // blocked storage or broken JSON: start from defaults
     }
@@ -16,8 +20,8 @@ export class DesignStorage {
 
   static save(design: PosterDesign): void {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { title, stats, ...style } = design;
-    DesignStorage.write(style);
+    const { title, photo, ...remembered } = design;
+    DesignStorage.write(remembered);
   }
 
   /** Makes these colors the starting look for the next file (e.g. after opening a theme link). */
@@ -29,11 +33,11 @@ export class DesignStorage {
     });
   }
 
-  private static write(style: Partial<PosterStyle>): void {
+  private static write(remembered: RememberedDesign): void {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(style));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(remembered));
     } catch {
-      // Not critical: the style just won't be remembered
+      // Not critical: the design just won't be remembered
     }
   }
 }

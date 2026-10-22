@@ -3,6 +3,7 @@ import type { SportType } from '../activity/SportType';
 import { Graphemes } from '../format/Graphemes';
 import type { StatId } from '../format/StatPresenter';
 import type { RouteColoring } from '../route/RouteShape';
+import { PhotoPlacement, type PhotoSettings } from './PhotoPlacement';
 import type { PosterFormatId } from './PosterFormat';
 import type { ThemeId } from './PosterTheme';
 
@@ -25,10 +26,15 @@ export interface PosterDesign {
   privacyMeters: number;
   showElevation: boolean;
   showLogo: boolean;
+  /** Placement of the background photo; only used while a photo is loaded */
+  photo: PhotoSettings;
 }
 
-/** The look-and-feel part of a design: remembered between files. */
-export type PosterStyle = Omit<PosterDesign, 'title' | 'stats'>;
+/** The look-and-feel part of a design. Photo placement belongs to one photo, so it's left out. */
+export type PosterStyle = Omit<PosterDesign, 'title' | 'stats' | 'photo'>;
+
+/** What carries over to the next file: the look and the picked stats, never the title. */
+export type RememberedDesign = Partial<PosterStyle> & { stats?: StatId[] };
 
 const PREFERRED_STATS: Record<SportType, StatId[]> = {
   run: ['distance', 'avgPace', 'movingTime', 'elevationGain'],
@@ -72,21 +78,43 @@ export class PosterDefaults {
     showLogo: true,
   };
 
-  /** A good-looking first design: the activity's name, sport-specific stats, remembered style. */
+  /**
+   * A design for a newly loaded activity: its own name as title, the remembered look,
+   * and the remembered stats where this activity has them (sport-specific defaults otherwise).
+   */
   static create(
     activity: Activity,
     available: StatId[],
-    style?: Partial<PosterStyle>,
+    remembered: RememberedDesign = {},
   ): PosterDesign {
-    const merged = { ...PosterDefaults.STYLE, ...style };
+    const { stats: rememberedStats, ...style } = remembered;
+    const merged = { ...PosterDefaults.STYLE, ...style, photo: PhotoPlacement.DEFAULTS };
     const coloring = PosterDefaults.coloringOptions(activity);
     const name = activity.meta.name?.trim();
     return {
       ...merged,
       title: name ? Graphemes.truncate(name, PosterDefaults.MAX_TITLE) : undefined,
       routeColoring: coloring.includes(merged.routeColoring) ? merged.routeColoring : 'solid',
-      stats: PosterDefaults.defaultStats(activity.sport, available, activity.hasGps),
+      stats: rememberedStats?.length
+        ? PosterDefaults.carryOverStats(rememberedStats, activity, available)
+        : PosterDefaults.defaultStats(activity.sport, available, activity.hasGps),
     };
+  }
+
+  /**
+   * Keeps the previous file's stats that this activity also has (pace ↔ speed swapped
+   * for the sport), then tops up with defaults to the same count.
+   */
+  static carryOverStats(previous: StatId[], activity: Activity, available: StatId[]): StatId[] {
+    const target = Math.min(previous.length, PosterDefaults.MAX_STATS);
+    const kept = PosterDefaults.adaptStats(previous, activity.sport)
+      .filter((id, i, all) => available.includes(id) && all.indexOf(id) === i)
+      .slice(0, target);
+    for (const id of PosterDefaults.defaultStats(activity.sport, available, activity.hasGps)) {
+      if (kept.length >= target) break;
+      if (!kept.includes(id)) kept.push(id);
+    }
+    return kept;
   }
 
   static defaultStats(sport: SportType, available: StatId[], hasGps = true): StatId[] {

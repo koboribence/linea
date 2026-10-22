@@ -10,10 +10,11 @@ import { ThemeLibrary } from '../themes/ThemeLibrary';
 interface ThemePickerProps {
   design: PosterDesign;
   update: (changes: Partial<PosterDesign>) => void;
+  hasPhoto: boolean;
 }
 
 /** Preset and saved swatches, two custom colors, saving/sharing them, and the sticker switch. */
-export function ThemePicker({ design, update }: ThemePickerProps) {
+export function ThemePicker({ design, update, hasPhoto }: ThemePickerProps) {
   const { i18n } = useLocale();
   const [saved, setSaved] = useState(ThemeLibrary.load);
   const [sharing, setSharing] = useState<CustomTheme>();
@@ -109,12 +110,15 @@ export function ThemePicker({ design, update }: ThemePickerProps) {
         </div>
       )}
 
-      <Toggle
-        label={i18n.t('editor.transparent')}
-        hint={i18n.t('editor.transparentHint')}
-        checked={design.transparent}
-        onChange={(transparent) => update({ transparent })}
-      />
+      {/* With a background photo the image can't be a transparent sticker */}
+      {!hasPhoto && (
+        <Toggle
+          label={i18n.t('editor.transparent')}
+          hint={i18n.t('editor.transparentHint')}
+          checked={design.transparent}
+          onChange={(transparent) => update({ transparent })}
+        />
+      )}
 
       {sharing && <ShareThemeDialog theme={sharing} onClose={() => setSharing(undefined)} />}
     </>

@@ -61,25 +61,21 @@ export function App() {
       </header>
 
       <main className="app__main">
-        {loaded ? (
-          // A new key per file resets the editor to that file's defaults
-          <EditorScreen key={loaded.loadId} activity={loaded.activity} />
-        ) : (
-          <>
-            <p className="app__tagline">{i18n.t('app.tagline')}</p>
-            {themeReceived && (
-              <p className="notice" role="status">
-                {i18n.t('share.received')}
-              </p>
-            )}
-            <DropZone
-              onFile={open}
-              onIntent={preload}
-              busy={state.status === 'loading'}
-              error={error}
-            />
-          </>
+        {!loaded && <p className="app__tagline">{i18n.t('app.tagline')}</p>}
+        {!loaded && themeReceived && (
+          <p className="notice" role="status">
+            {i18n.t('share.received')}
+          </p>
         )}
+        <DropZone
+          onFile={open}
+          onIntent={preload}
+          busy={state.status === 'loading'}
+          compact={loaded !== undefined}
+          error={error}
+        />
+        {/* A new key per file starts a fresh editor; the remembered look and stats carry over */}
+        {loaded && <EditorScreen key={loaded.loadId} activity={loaded.activity} />}
       </main>
     </div>
   );

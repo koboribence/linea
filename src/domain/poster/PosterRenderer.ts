@@ -2,6 +2,7 @@ import type { ElevationProfile } from '../route/ElevationProfile';
 import type { Box, ScreenPoint } from '../route/RouteShape';
 import { Graphemes } from '../format/Graphemes';
 import { Color } from './Color';
+import { PhotoPlacement } from './PhotoPlacement';
 import type { PosterScene, PosterStat } from './PosterScene';
 
 const BASE_WIDTH = 1080;
@@ -206,12 +207,21 @@ export class PosterRenderer {
     ctx.clearRect(0, 0, scene.width, scene.height);
     if (scene.transparent) return;
 
+    // A photo goes under the theme background, which then acts as an adjustable overlay
+    if (scene.photo) {
+      const { image, settings } = scene.photo;
+      const rect = PhotoPlacement.rect(image, scene, settings);
+      ctx.drawImage(image.source, rect.x, rect.y, rect.width, rect.height);
+      ctx.globalAlpha = settings.overlay;
+    }
+
     const [from, to] = scene.colors.background;
     const gradient = ctx.createLinearGradient(0, 0, scene.width, scene.height);
     gradient.addColorStop(0, from);
     gradient.addColorStop(1, to);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, scene.width, scene.height);
+    ctx.globalAlpha = 1;
 
     // Faint accent light behind the route makes dark themes feel lit
     if (scene.colors.glow) {
@@ -459,9 +469,9 @@ export class PosterRenderer {
     return this.ctx.measureText(label.toLocaleUpperCase()).width;
   }
 
-  /** On a transparent sticker the text sits on an unknown photo; a soft shadow keeps it readable. */
+  /** On a sticker or a background photo the text sits on busy pixels; a soft shadow keeps it readable. */
   private textShadow(): void {
-    if (!this.scene.transparent) return this.noShadow();
+    if (!this.scene.transparent && !this.scene.photo) return this.noShadow();
     this.ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
     this.ctx.shadowBlur = 16 * this.u;
     this.ctx.shadowOffsetY = 2 * this.u;

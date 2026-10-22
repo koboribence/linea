@@ -4,6 +4,7 @@ import { UnitFormatter } from '../format/UnitFormatter';
 import type { ElevationProfile } from '../route/ElevationProfile';
 import type { RouteShape } from '../route/RouteShape';
 import type { MessageKey } from '../../i18n/messages/hu';
+import type { PhotoSettings } from './PhotoPlacement';
 import type { PosterDesign } from './PosterDesign';
 import { POSTER_FORMATS } from './PosterFormat';
 import { PosterTheme, type ThemeColors } from './PosterTheme';
@@ -16,12 +17,20 @@ export interface PosterStat {
   unit: string;
 }
 
+/** A decoded image ready to draw (e.g. an ImageBitmap). */
+export interface PhotoImage {
+  source: CanvasImageSource;
+  width: number;
+  height: number;
+}
+
 /** Everything the renderer draws, already translated and formatted. */
 export interface PosterScene {
   width: number;
   height: number;
   colors: ThemeColors;
   transparent: boolean;
+  photo?: { image: PhotoImage; settings: PhotoSettings };
   eyebrow?: string;
   title: string;
   stats: PosterStat[];
@@ -38,6 +47,8 @@ export interface SceneInput {
   statItems: StatItem[];
   route?: RouteShape;
   elevation?: ElevationProfile;
+  /** The user's background photo, if any */
+  photo?: PhotoImage;
   brandName: string;
 }
 
@@ -48,7 +59,8 @@ export class PosterSceneBuilder {
     private readonly format: UnitFormatter,
   ) {}
 
-  build({ activity, design, statItems, route, elevation, brandName }: SceneInput): PosterScene {
+  build(input: SceneInput): PosterScene {
+    const { activity, design, statItems, route, elevation, photo, brandName } = input;
     const size = POSTER_FORMATS[design.format];
     const byId = new Map(statItems.map((item) => [item.id, item]));
 
@@ -58,7 +70,9 @@ export class PosterSceneBuilder {
         background: design.customBackground,
         accent: design.customAccent,
       }),
-      transparent: design.transparent,
+      // A photo fills the background, so the image can't be a transparent sticker at the same time
+      transparent: design.transparent && !photo,
+      photo: photo && { image: photo, settings: design.photo },
       eyebrow: design.showDate ? this.eyebrow(activity) : undefined,
       title: design.title?.trim() || this.autoTitle(activity),
       stats: design.stats.flatMap((id) => {
