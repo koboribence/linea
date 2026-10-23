@@ -77,6 +77,9 @@ export interface MapPalette {
 export interface MapContrast {
   land: string;
   extreme: string;
+  /** Town names drawn over the map, and their outline */
+  label: string;
+  labelHalo: string;
 }
 
 /** The plain looks of the flyover map: cool blue-grey at night, soft grey by day. */
@@ -164,26 +167,22 @@ const DROPPED_LAYERS = [
   /^label_(other|state|country)/,
   /^airport/,
 ];
-/** Town and city name layers of both base styles, by the kind of place they name. */
-const PLACE_LAYERS: Record<string, PlaceLevel> = {
-  place_village: 'village',
-  place_town: 'town',
-  place_city: 'city',
-  place_city_large: 'city',
-  label_village: 'village',
-  label_town: 'town',
-  label_city: 'city',
-  label_city_capital: 'city',
-};
-const PLACE_NAMES = Object.keys(PLACE_LAYERS);
-const PLACE_RANK: Record<PlaceLevel, number> = { village: 0, town: 1, city: 2 };
 /**
- * Name sizes in pixels of the 1080 px wide output, bold, with a dark or light outline:
- * readable on a phone screen, where the video shows at about a third of that.
+ * Town names of the base styles. They are left out: the poster renderer names places itself
+ * (see PlaceLabels), so names never stick out of the image or sit under the text.
  */
-const PLACE_SIZE: Record<PlaceLevel, number> = { village: 28, town: 34, city: 40 };
+const PLACE_LAYERS = [
+  'place_village',
+  'place_town',
+  'place_city',
+  'place_city_large',
+  'label_village',
+  'label_town',
+  'label_city',
+  'label_city_capital',
+];
 /** Route areas (longer side, meters) up to which villages, then towns are still named. */
-const PLACE_AREA = { village: 5_000, town: 15_000 };
+const PLACE_AREA = { village: 5_000, town: 40_000 };
 /** Road centre lines that get the palette color in videos, so streets stay visible. */
 const ROAD_LINES = [
   'highway_path',
@@ -198,9 +197,7 @@ type PaintKey =
   | 'hillshade-highlight-color'
   | 'hillshade-shadow-color'
   | 'hillshade-accent-color'
-  | 'line-color'
-  | 'text-color'
-  | 'text-halo-color';
+  | 'line-color';
 export type PalettePaint = [layer: string, property: PaintKey, color: string];
 
 const dem = (detail: MapDetail): SourceSpecification => ({
@@ -246,8 +243,8 @@ export class MapStyles {
   }
 
   /** Identifies a look, for caching rendered maps. */
-  static lookKey({ exaggeration, places }: MapLook): string {
-    return `${exaggeration.toFixed(1)}|${places}`;
+  static lookKey({ exaggeration }: MapLook): string {
+    return exaggeration.toFixed(1);
   }
 
   /**
@@ -309,14 +306,14 @@ export class MapStyles {
 
   /**
    * The map colors text has to stand out from: its land, and its most contrasting part
-   * (brightest on a dark map, darkest on a light one), sky and town names included.
+   * (brightest on a dark map, darkest on a light one), sky included. Also the colors for
+   * town names, which the renderer draws.
    */
   static contrast(tone: MapTone, palette: MapPalette): MapContrast {
     const parts = [
       palette.land,
       palette.road,
       palette.building,
-      palette.label,
       palette.highlight,
       palette.shadow,
       palette.sky,
@@ -324,7 +321,12 @@ export class MapStyles {
     ].map((hex) => Color.parse(hex));
     const byLuminance = parts.sort((a, b) => a.luminance - b.luminance);
     const extreme = tone === 'dark' ? byLuminance.at(-1)! : byLuminance[0]!;
-    return { land: palette.land, extreme: extreme.toHex() };
+    return {
+      land: palette.land,
+      extreme: extreme.toHex(),
+      label: palette.label,
+      labelHalo: palette.labelHalo,
+    };
   }
 
   /**
@@ -338,8 +340,6 @@ export class MapStyles {
       ['shading', 'hillshade-shadow-color', palette.shadow],
       ['shading', 'hillshade-accent-color', palette.shade],
       ...ROAD_LINES.map((id): PalettePaint => [id, 'line-color', palette.road]),
-      ...PLACE_NAMES.map((id): PalettePaint => [id, 'text-color', palette.label]),
-      ...PLACE_NAMES.map((id): PalettePaint => [id, 'text-halo-color', palette.labelHalo]),
     ];
   }
 
@@ -364,8 +364,7 @@ export class MapStyles {
   ): StyleSpecification {
     let layers = base.layers
       .filter((layer) => !DROPPED_LAYERS.some((pattern) => pattern.test(layer.id)))
-      .filter((layer) => MapStyles.namesPlace(layer.id, look.places))
-      .map(MapStyles.stylePlaceName);
+      .filter((layer) => !PLACE_LAYERS.includes(layer.id));
     if (kind === 'flyover') layers = layers.map(MapStyles.extrudeBuildings);
     // Terrain shading goes under roads and labels, right above land and water fills
     const firstLine = layers.findIndex((layer) => layer.type === 'line' || layer.type === 'symbol');
@@ -403,33 +402,6 @@ export class MapStyles {
       source.type === 'vector' ? { ...source, maxzoom: PREVIEW_MAXZOOM.vector } : source,
     ]);
     return Object.fromEntries(limited) as StyleSpecification['sources'];
-  }
-
-  /** False for name layers of places smaller than the level (e.g. villages on a wide area). */
-  private static namesPlace(id: string, level: PlaceLevel): boolean {
-    const kind = PLACE_LAYERS[id];
-    return kind === undefined || PLACE_RANK[kind] >= PLACE_RANK[level];
-  }
-
-  /**
-   * Town names readable on a poster: a fixed size by kind of place, bold, with an outline,
-   * and at every zoom (the base styles hide them from zoom 14–15 on, but the video camera
-   * sees a whole area from that close).
-   */
-  private static stylePlaceName(layer: LayerSpecification): LayerSpecification {
-    const kind = PLACE_LAYERS[layer.id];
-    if (layer.type !== 'symbol' || kind === undefined) return layer;
-    const named = { ...layer };
-    delete named.maxzoom;
-    return {
-      ...named,
-      layout: {
-        ...layer.layout,
-        'text-size': PLACE_SIZE[kind],
-        'text-font': ['Noto Sans Bold'],
-      },
-      paint: { ...layer.paint, 'text-halo-width': 2.5, 'text-halo-blur': 0.5 },
-    };
   }
 
   /** Flat building outlines become 3D blocks with their real height. */

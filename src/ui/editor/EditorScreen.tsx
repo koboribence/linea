@@ -72,6 +72,7 @@ export function EditorScreen({ activity: loaded }: { activity: Activity }) {
               route,
               elevation: editor.elevation,
               builder: editor.builder,
+              highlights: editor.highlights,
             }}
           />
         ) : (
@@ -117,6 +118,7 @@ export function EditorScreen({ activity: loaded }: { activity: Activity }) {
           sport={activity.sport}
           setSport={editor.setSport}
           statItems={editor.statItems}
+          highlightItems={editor.highlightItems}
           coloringOptions={editor.coloringOptions}
           hasGps={activity.hasGps}
           hasRoute={editor.hasRoute}

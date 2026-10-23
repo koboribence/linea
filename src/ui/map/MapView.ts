@@ -1,5 +1,6 @@
 import type { LngLat, Map as MapLibreMap, StyleSpecification } from 'maplibre-gl';
 import type { CameraShot } from '../../domain/map/FlyoverPath';
+import { PlaceLabels, type Place } from '../../domain/map/PlaceLabels';
 import {
   BASE_STYLE_URLS,
   MapStyles,
@@ -113,6 +114,10 @@ export class MapView {
       pixelRatio: options.pixelRatio ?? 1,
       maxPitch: 85,
       fadeDuration: 0,
+      // We place the camera exactly (height included). Otherwise MapLibre moves the view's
+      // center onto the terrain whenever a terrain tile arrives, so the map jumps and slides
+      // under the route we draw on top
+      centerClampedToGround: false,
       // MapLibre caps its cache at (tiles in one view × zoom levels); room for many views
       ...(options.kind === 'flyover' && {
         maxTileCacheSize: FLYOVER_TILE_CACHE,
@@ -176,6 +181,14 @@ export class MapView {
     );
   }
 
+  /**
+   * Draws the current view right away instead of on the next animation frame, so the map and
+   * the text and route drawn over it show the same moment.
+   */
+  renderNow(): void {
+    this.map.redraw();
+  }
+
   /** New colors for streets, buildings, relief and sky, without reloading anything. */
   recolor(palette: MapPalette): void {
     for (const [layer, property, value] of MapStyles.paints(palette)) {
@@ -213,6 +226,21 @@ export class MapView {
       await this.settle(8000);
       onProgress((i + 1) / shots.length);
     }
+  }
+
+  /**
+   * Named places in the loaded tiles (whether the style shows them or not), for the
+   * renderer's own town names.
+   */
+  places(): Place[] {
+    const features = this.map.querySourceFeatures('openmaptiles', { sourceLayer: 'place' });
+    return PlaceLabels.fromFeatures(
+      features.flatMap((feature) =>
+        feature.geometry.type === 'Point'
+          ? [{ ...feature.properties, lngLat: feature.geometry.coordinates as [number, number] }]
+          : [],
+      ),
+    );
   }
 
   /** Moves the map's focal point into the given band of the image (top/bottom insets, pixels). */

@@ -76,6 +76,7 @@ describe('stat picks per sport', () => {
       { mapStyle: 'satellite' as never, videoSeconds: 15 },
     );
     expect(design.mapStyle).toBe(PosterDefaults.STYLE.mapStyle);
+    expect(design.highlights).toEqual([]);
     expect(design.videoSeconds).toBe(20);
   });
 

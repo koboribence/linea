@@ -1,6 +1,13 @@
 import { FlyoverPath } from '../../domain/map/FlyoverPath';
 import { MapFraming } from '../../domain/map/MapFraming';
-import { MapStyles, type MapKind, type MapLook, type MapTone } from '../../domain/map/MapStyles';
+import {
+  MapStyles,
+  type MapKind,
+  type MapLook,
+  type MapTone,
+  type PlaceLevel,
+} from '../../domain/map/MapStyles';
+import { PlaceLabels, type ScreenPlace } from '../../domain/map/PlaceLabels';
 import type { PhotoImage } from '../../domain/poster/PosterScene';
 import type { GeoRoute } from '../../domain/route/RouteShape';
 import { MapView } from './MapView';
@@ -18,6 +25,9 @@ export interface StillResult {
   image: PhotoImage;
   /** The route's points on the image, aligned with route.coordinates */
   points: ({ x: number; y: number } | undefined)[];
+  /** Places on the image for town names, and the smallest kind to name */
+  places: ScreenPlace[];
+  placeLevel: PlaceLevel;
 }
 
 /** Results kept, so switching formats back and forth is instant. */
@@ -74,9 +84,14 @@ export class StillMap {
     await view.settle(20000);
 
     const bitmap = await createImageBitmap(view.canvas);
+    const places = view.places();
+    const start = PlaceLabels.startPlace(places, route.coordinates[0]!);
+    const named = PlaceLabels.relevant(places, request.look.places, start);
     const result = {
       image: { source: bitmap, width, height },
       points: view.project(route.coordinates),
+      places: PlaceLabels.onScreen(named, view.project(named.map((place) => place.lngLat)), start),
+      placeLevel: request.look.places,
     };
     this.remember(key, result);
     return result;

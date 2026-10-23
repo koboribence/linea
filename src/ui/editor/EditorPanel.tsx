@@ -11,6 +11,7 @@ import { Section } from '../controls/Section';
 import { Segmented } from '../controls/Segmented';
 import { Toggle } from '../controls/Toggle';
 import { FontPicker } from './FontPicker';
+import { HighlightPicker, type HighlightItem } from './HighlightPicker';
 import { BackgroundPicker } from './BackgroundPicker';
 import { MapStylePicker } from './MapStylePicker';
 import { StatPicker } from './StatPicker';
@@ -22,6 +23,8 @@ interface EditorPanelProps {
   sport: SportType;
   setSport: (sport: SportType) => void;
   statItems: StatItem[];
+  /** Peaks of the activity a 30 s video can point out */
+  highlightItems: HighlightItem[];
   coloringOptions: RouteColoring[];
   hasGps: boolean;
   hasRoute: boolean;
@@ -109,6 +112,20 @@ export function EditorPanel(props: EditorPanelProps) {
           <p className="privacy-note">{t('map.privacy')}</p>
         </Section>
       )}
+
+      {/* Long videos have time to stop at the peaks along the way */}
+      {props.mode === 'video' &&
+        design.videoSeconds >= PosterDefaults.HIGHLIGHT_MIN_SECONDS &&
+        props.highlightItems.length > 0 && (
+          <Section title={t('highlights.section')}>
+            <p className="field__hint">{t('highlights.hint')}</p>
+            <HighlightPicker
+              items={props.highlightItems}
+              selected={design.highlights}
+              onChange={(highlights) => update({ highlights })}
+            />
+          </Section>
+        )}
 
       <Section title={t('editor.text')}>
         <label className="field">

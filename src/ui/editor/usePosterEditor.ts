@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BRAND } from '../../brand';
 import type { Activity } from '../../domain/activity/Activity';
 import type { SportType } from '../../domain/activity/SportType';
+import { Graphemes } from '../../domain/format/Graphemes';
 import { StatPresenter } from '../../domain/format/StatPresenter';
 import { MapStyles } from '../../domain/map/MapStyles';
 import { PosterDefaults, type PosterDesign } from '../../domain/poster/PosterDesign';
@@ -9,6 +10,7 @@ import { PhotoPlacement } from '../../domain/poster/PhotoPlacement';
 import { POSTER_FORMATS } from '../../domain/poster/PosterFormat';
 import { PosterSceneBuilder, type PhotoImage } from '../../domain/poster/PosterScene';
 import { ElevationProfile } from '../../domain/route/ElevationProfile';
+import { RouteHighlights } from '../../domain/route/RouteHighlights';
 import { PrivacyZone } from '../../domain/route/PrivacyZone';
 import { RouteShape } from '../../domain/route/RouteShape';
 import { StatsCalculator } from '../../domain/stats/StatsCalculator';
@@ -44,13 +46,17 @@ export function usePosterEditor(loaded: Activity, mode: 'image' | 'video' = 'ima
     [format, activity, stats],
   );
 
-  const [design, setDesign] = useState<PosterDesign>(() =>
-    PosterDefaults.create(
+  const [design, setDesign] = useState<PosterDesign>(() => {
+    const created = PosterDefaults.create(
       activity,
       statItems.map((item) => item.id),
       DesignStorage.load(),
-    ),
-  );
+    );
+    if (created.title) return created;
+    // Files without a name (most FIT files) start with the automatic title, ready to edit
+    const auto = new PosterSceneBuilder((k, p) => i18n.t(k, p), format).autoTitle(activity);
+    return { ...created, title: Graphemes.truncate(auto, PosterDefaults.MAX_TITLE) };
+  });
   useEffect(() => DesignStorage.save(design), [design]);
 
   const route = useMemo(
@@ -110,7 +116,16 @@ export function usePosterEditor(loaded: Activity, mode: 'image' | 'video' = 'ima
       still.points.length === geo.coordinates.length;
     if (!baseScene.map || !fits) return baseScene;
     const points = toScreenRoute(still.points, geo.values);
-    return { ...baseScene, map: { ...baseScene.map, image: still.image, route: points } };
+    return {
+      ...baseScene,
+      map: {
+        ...baseScene.map,
+        image: still.image,
+        route: points,
+        places: still.places,
+        placeLevel: still.placeLevel,
+      },
+    };
   }, [baseScene, mapSnapshot.result, route]);
 
   /** Resolves to false when the file isn't a readable image. */
@@ -158,6 +173,20 @@ export function usePosterEditor(loaded: Activity, mode: 'image' | 'video' = 'ima
     }));
   }, []);
 
+  // Where the peaks happened, for videos that point them out; each with its stat's value
+  const highlights = useMemo(
+    () => (route ? RouteHighlights.find(activity, route.geo) : []),
+    [activity, route],
+  );
+  const highlightItems = useMemo(
+    () =>
+      highlights.flatMap(({ id }) => {
+        const stat = statItems.find((s) => s.id === RouteHighlights.statFor(id, activity.sport));
+        return stat ? [{ ...stat, id }] : [];
+      }),
+    [highlights, statItems, activity.sport],
+  );
+
   return {
     activity,
     stats,
@@ -177,6 +206,8 @@ export function usePosterEditor(loaded: Activity, mode: 'image' | 'video' = 'ima
     removePhoto,
     panPhoto,
     statItems,
+    highlights,
+    highlightItems,
     hasRoute: route !== undefined,
     hasElevation: elevation !== undefined,
     coloringOptions: PosterDefaults.coloringOptions(activity),

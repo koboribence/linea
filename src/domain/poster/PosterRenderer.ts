@@ -1,3 +1,5 @@
+import type { PlaceLevel } from '../map/MapStyles';
+import { PlaceLabels } from '../map/PlaceLabels';
 import type { ElevationProfile } from '../route/ElevationProfile';
 import type { Box, ScreenPoint } from '../route/RouteShape';
 import { Graphemes } from '../format/Graphemes';
@@ -8,6 +10,10 @@ import { Readability } from './Readability';
 import type { PhotoImage, PosterScene, PosterStat } from './PosterScene';
 
 const BASE_WIDTH = 1080;
+/** Town name sizes by kind of place, in units */
+const PLACE_NAME_SIZE: Record<PlaceLevel, number> = { city: 30, town: 25, village: 22 };
+/** Town names are a little subdued: part of the map, not of the poster's text */
+const PLACE_NAME_OPACITY = 0.85;
 /** Gap between stat columns, in units */
 const STAT_GAP = 32;
 /** The brand wordmark always uses the brand font, whatever font set the poster has */
@@ -106,9 +112,11 @@ export class PosterRenderer {
     const { scene } = this;
     const layout = this.layout();
     this.drawBackground(layout);
+    if (scene.map?.places) this.drawPlaceNames(layout);
     this.drawHeader(layout.title);
     // On a map background the map has already drawn the route
     if (scene.map?.route) this.drawRoutePoints(scene.map.route, scene.map.showStart !== false);
+    if (scene.map?.highlights?.length) this.drawHighlights(layout);
     else if (scene.route && !scene.map) this.drawRoute(layout.middle);
     else if (layout.hero) this.drawHero(layout.hero, layout.middle);
     if (layout.elevation && scene.elevation) {
@@ -495,6 +503,140 @@ export class PosterRenderer {
       layout.elevation ? need(colors.accent, Readability.GRAPHICS) : 0,
     );
     return { top, bottom };
+  }
+
+  /**
+   * Town names in the map area between title and stats, never at the image edges, the start
+   * place always among them (see PlaceLabels for the rules). On a live map (video) names fade
+   * in and out near the edges of the area instead of popping.
+   */
+  private drawPlaceNames(layout: Layout): void {
+    const { ctx, u, pad, scene } = this;
+    const map = scene.map!;
+    const font = (size: number) => PosterFonts.css(this.font.label, size);
+    const area = {
+      x: pad,
+      y: layout.title.bottom + 32 * u,
+      width: scene.width - 2 * pad,
+      height: this.footerTop(layout) - 32 * u - (layout.title.bottom + 32 * u),
+    };
+    const labels = PlaceLabels.choose(map.places!, {
+      level: map.placeLevel ?? 'village',
+      area,
+      measure: (name, kind) => {
+        const size = PLACE_NAME_SIZE[kind] * u;
+        this.setFont(font(size), size * 0.08);
+        return { width: ctx.measureText(name.toLocaleUpperCase()).width, height: size };
+      },
+      spacing: 28 * u,
+      fade: map.image ? 0 : 60 * u,
+    });
+
+    const color = Color.parse(map.contrast.label);
+    const halo = Color.parse(map.contrast.labelHalo);
+    this.noShadow();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    for (const label of labels) {
+      const size = PLACE_NAME_SIZE[label.kind] * u;
+      this.setFont(font(size), size * 0.08);
+      const text = label.name.toLocaleUpperCase();
+      ctx.lineWidth = size * 0.22;
+      ctx.strokeStyle = halo.toRgba(0.75 * label.opacity);
+      ctx.strokeText(text, label.x, label.y);
+      ctx.fillStyle = color.toRgba(PLACE_NAME_OPACITY * label.opacity);
+      ctx.fillText(text, label.x, label.y);
+    }
+  }
+
+  /**
+   * Peaks on the route (video): a dot where it happened and a card with the label and value
+   * above it (below, when there is no room up there), kept inside the map area.
+   */
+  private drawHighlights(layout: Layout): void {
+    const { ctx, u, pad, scene } = this;
+    const top = layout.title.bottom + 24 * u;
+    const bottom = this.footerTop(layout) - 24 * u;
+    const bg = Color.parse(scene.colors.background[0]);
+    const cards: Box[] = [];
+    this.noShadow();
+
+    for (const mark of scene.map!.highlights!) {
+      ctx.globalAlpha = mark.opacity;
+      const labelSize = 18 * u;
+      const valueSize = 44 * u;
+      const padX = 18 * u;
+      const padY = 14 * u;
+      this.setLabelFont(labelSize);
+      const label = mark.label.toLocaleUpperCase();
+      const labelWidth = ctx.measureText(label).width;
+      const valueWidth = this.valueWidth(mark, valueSize);
+      const width = Math.max(labelWidth, valueWidth) + 2 * padX;
+      const height = labelSize + 8 * u + valueSize * 0.74 + 2 * padY;
+      const gap = 26 * u;
+
+      // Above the dot, else below, else stepped further away; no room at all: just the dot
+      const x = Math.min(Math.max(mark.x - width / 2, pad), scene.width - pad - width);
+      const step = height + 10 * u;
+      const slots = [0, 1, 2].flatMap((k) => [
+        { x, y: mark.y - gap - height - k * step, width, height },
+        { x, y: mark.y + gap + k * step, width, height },
+      ]);
+      const card = slots.find(
+        (box) =>
+          box.y >= top &&
+          box.y + box.height <= bottom &&
+          !cards.some((c) => PosterRenderer.overlap(c, box)),
+      );
+      if (!card) {
+        this.drawHighlightDot(mark);
+        continue;
+      }
+      cards.push(card);
+
+      // Connector, card, then the dot on top
+      const anchorY = card.y > mark.y ? card.y : card.y + card.height;
+      ctx.strokeStyle = scene.colors.accent;
+      ctx.lineWidth = 3 * u;
+      ctx.beginPath();
+      ctx.moveTo(mark.x, mark.y);
+      ctx.lineTo(Math.min(Math.max(mark.x, card.x + 16 * u), card.x + width - 16 * u), anchorY);
+      ctx.stroke();
+
+      ctx.fillStyle = bg.toRgba(0.86);
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(card.x, card.y, width, height, 14 * u);
+      else ctx.rect(card.x, card.y, width, height);
+      ctx.fill();
+
+      this.setLabelFont(labelSize);
+      ctx.fillStyle = scene.colors.accentText;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(label, card.x + padX, card.y + padY);
+      const baseline = card.y + padY + labelSize + 8 * u + valueSize * 0.74;
+      this.drawValue(mark, card.x + padX, baseline, valueSize, scene.colors.text);
+      this.drawHighlightDot(mark);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  private drawHighlightDot(mark: { x: number; y: number }): void {
+    const { ctx, u, scene } = this;
+    ctx.fillStyle = scene.colors.accent;
+    ctx.strokeStyle = scene.colors.background[0];
+    ctx.lineWidth = 4 * u;
+    ctx.beginPath();
+    ctx.arc(mark.x, mark.y, 10 * u, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  private static overlap(a: Box, b: Box): boolean {
+    return (
+      a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+    );
   }
 
   /** Data credits the map licenses require, small but legible, at the very bottom. */

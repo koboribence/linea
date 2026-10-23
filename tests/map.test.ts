@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { FlyoverPath } from '../src/domain/map/FlyoverPath';
 import { LiveStats } from '../src/domain/map/LiveStats';
 import { MapStyles } from '../src/domain/map/MapStyles';
+import { PlaceLabels, type ScreenPlace } from '../src/domain/map/PlaceLabels';
 import { Color } from '../src/domain/poster/Color';
 import { PrivacyZone } from '../src/domain/route/PrivacyZone';
 import { RouteShape } from '../src/domain/route/RouteShape';
@@ -144,49 +145,23 @@ describe('MapStyles', () => {
     const style = MapStyles.build('streets', base, look, streets);
     const ids = style.layers.map((l) => l.id);
     expect(style.terrain).toEqual({ source: 'terrain', exaggeration: look.exaggeration });
-    expect(ids).toEqual([
-      'background',
-      'water',
-      'building',
-      'shading',
-      'highway_minor',
-      'place_city',
-    ]);
+    expect(ids).toEqual(['background', 'water', 'building', 'shading', 'highway_minor']);
     // Images keep the base style's own street colors
     const road = style.layers.find((l) => l.id === 'highway_minor');
     expect(road?.type === 'line' && road.paint?.['line-color']).toBe('#181818');
   });
 
-  it('names only the bigger places on a wide area, in readable bold type', () => {
-    const symbol = (id: string): LayerSpecification => ({
-      id,
-      type: 'symbol',
-      source: 'x',
-      maxzoom: 14,
-      layout: { 'text-size': ['interpolate', ['linear'], ['zoom'], 8, 10, 14, 20] },
-    });
-    const places = { ...base, layers: ['label_village', 'label_town', 'label_city'].map(symbol) };
-    const named = (level: 'village' | 'town' | 'city') =>
-      MapStyles.build('streets', places, { ...look, places: level }, streets).layers.filter(
-        (l) => l.type === 'symbol',
-      );
-    expect(named('village').map((l) => l.id)).toEqual([
-      'label_village',
-      'label_town',
-      'label_city',
-    ]);
-    expect(named('town').map((l) => l.id)).toEqual(['label_town', 'label_city']);
-    expect(named('city').map((l) => l.id)).toEqual(['label_city']);
+  it("leaves the map's own town names out (the renderer names places itself)", () => {
+    const symbol = (id: string): LayerSpecification => ({ id, type: 'symbol', source: 'x' });
+    const places = { ...base, layers: ['label_village', 'place_city', 'water_name'].map(symbol) };
+    const ids = MapStyles.build('streets', places, look, streets).layers.map((l) => l.id);
+    expect(ids).toEqual(['shading']);
+  });
 
-    const city = named('city')[0]!;
-    expect(city.maxzoom).toBeUndefined();
-    expect(city.type === 'symbol' && city.layout?.['text-size']).toBe(40);
-    expect(city.type === 'symbol' && city.layout?.['text-font']).toEqual(['Noto Sans Bold']);
-    expect(city.type === 'symbol' && city.paint?.['text-halo-color']).toBe(streets.labelHalo);
-
+  it('names fewer kinds of places the wider the area', () => {
     expect(MapStyles.placeLevel(4_000)).toBe('village');
-    expect(MapStyles.placeLevel(12_000)).toBe('town');
-    expect(MapStyles.placeLevel(33_000)).toBe('city');
+    expect(MapStyles.placeLevel(33_000)).toBe('town');
+    expect(MapStyles.placeLevel(120_000)).toBe('city');
     // This fixture covers about 7 km
     expect(look.places).toBe('town');
   });
@@ -195,14 +170,7 @@ describe('MapStyles', () => {
     const palette = MapStyles.palette('flyover', 'dark');
     const style = MapStyles.build('flyover', base, look, palette);
     const ids = style.layers.map((l) => l.id);
-    expect(ids).toEqual([
-      'background',
-      'water',
-      'building-3d',
-      'shading',
-      'highway_minor',
-      'place_city',
-    ]);
+    expect(ids).toEqual(['background', 'water', 'building-3d', 'shading', 'highway_minor']);
     const building = style.layers.find((l) => l.id === 'building-3d');
     expect(building?.type === 'fill-extrusion' && building.paint?.['fill-extrusion-color']).toBe(
       palette.building,
@@ -238,6 +206,87 @@ describe('MapStyles', () => {
 
   it('lifts flat terrain more than mountains', () => {
     expect(MapStyles.exaggeration(40)).toBeGreaterThan(MapStyles.exaggeration(2000));
+  });
+});
+
+describe('PlaceLabels', () => {
+  const place = (
+    name: string,
+    kind: 'city' | 'town' | 'village',
+    x: number,
+    y: number,
+    extra: Partial<ScreenPlace> = {},
+  ): ScreenPlace => ({ name, kind, rank: 10, lngLat: [0, 0], x, y, ...extra });
+  const area = { x: 100, y: 300, width: 880, height: 900 };
+  const options = {
+    level: 'town' as const,
+    area,
+    measure: (name: string) => ({ width: name.length * 20, height: 30 }),
+    spacing: 20,
+    fade: 0,
+  };
+
+  it('reads places from map features once each, ignoring other kinds', () => {
+    const places = PlaceLabels.fromFeatures([
+      { name: 'Érd', class: 'town', rank: 11, lngLat: [18.92, 47.38] },
+      { name: 'Érd', class: 'town', rank: 11, lngLat: [18.92, 47.38] },
+      { name: 'Magyarország', class: 'country', rank: 1, lngLat: [19, 47] },
+      { name: 'Tárnok', class: 'village', lngLat: [18.86, 47.37] },
+    ]);
+    expect(places.map((p) => p.name)).toEqual(['Érd', 'Tárnok']);
+    expect(places[1]!.rank).toBe(99);
+  });
+
+  it('finds the start place: the nearest one within a few kilometers', () => {
+    const places = PlaceLabels.fromFeatures([
+      { name: 'Érd', class: 'town', rank: 11, lngLat: [18.92, 47.38] },
+      { name: 'Tárnok', class: 'village', rank: 20, lngLat: [18.86, 47.37] },
+    ]);
+    expect(PlaceLabels.startPlace(places, [18.87, 47.37])?.name).toBe('Tárnok');
+    expect(PlaceLabels.startPlace(places, [19.5, 47.5])).toBeUndefined();
+  });
+
+  it('keeps names inside the area, apart, the important ones first', () => {
+    const labels = PlaceLabels.choose(
+      [
+        place('Edge', 'city', 120, 600), // would stick out on the left
+        place('Below', 'city', 500, 1250), // under the stats
+        place('Village', 'village', 500, 500), // too small for the level
+        place('Small', 'town', 500, 700, { rank: 12 }),
+        place('Big', 'city', 510, 705), // same spot, more important
+      ],
+      options,
+    );
+    expect(labels.map((l) => l.name)).toEqual(['Big']);
+  });
+
+  it('always names the start place, nudged inside if needed, even if small', () => {
+    const labels = PlaceLabels.choose(
+      [place('City', 'city', 500, 900), place('Startfalu', 'village', 110, 600, { start: true })],
+      options,
+    );
+    expect(labels[0]).toMatchObject({ name: 'Startfalu', start: true });
+    // Its box fits: centered at least half a name's width inside the area
+    expect(labels[0]!.x).toBeGreaterThanOrEqual(area.x + ('Startfalu'.length * 20) / 2);
+    expect(labels.map((l) => l.name)).toContain('City');
+  });
+
+  it('pulls the start name in when its place sits just below the map area', () => {
+    const [label] = PlaceLabels.choose(
+      [place('Érd', 'town', 500, area.y + area.height + 20, { start: true })],
+      options,
+    );
+    expect(label?.name).toBe('Érd');
+    expect(label!.y + 15).toBeLessThanOrEqual(area.y + area.height);
+  });
+
+  it('stays sparse on a wide area, and fades names near the edge on a moving map', () => {
+    const many = Array.from({ length: 30 }, (_, i) =>
+      place(`City${i}`, 'city', 150 + (i % 5) * 180, 350 + Math.floor(i / 5) * 140),
+    );
+    expect(PlaceLabels.choose(many, { ...options, level: 'city' }).length).toBeLessThanOrEqual(5);
+    const [faded] = PlaceLabels.choose([place('Rim', 'city', 200, 330)], { ...options, fade: 60 });
+    expect(faded!.opacity).toBeLessThan(1);
   });
 });
 

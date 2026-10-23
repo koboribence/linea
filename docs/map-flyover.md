@@ -25,6 +25,7 @@ domain/map/
   MapFraming    hová kerül az útvonal a képen (sáv a cím és az adatok között)
   FlyoverPath   a kamera mozgása t ∈ [0, 1] szerint; tiszta matematika
   LiveStats     a videó felpörgő számlálói (0-tól a végső értékig)
+  PlaceLabels   mely településnevek jelenjenek meg, és hol (a rajzoló írja ki őket)
 ui/map/
   MapView       MapLibre-burkoló: kamera, vetítés, betöltésre várás
   StillMap      állókép a képhez; egy életben tartott, láthatatlan térkép + gyorsítótár
@@ -65,7 +66,7 @@ Minden stílus domborzati és vektoros adatból készül, ezért bármilyen köz
 
 **Az alapstílus átalakítása:**
 - kikerülnek az utcanevek, egyirányú-nyilak, útszám-pajzsok, vízfeliratok, külvárosi, megyei és országcímkék (zsúfoltak, és külön betűtípus-letöltést igényelnek);
-- **településnevek:** az útvonal által átfogott terület (a befoglaló téglalap hosszabbik oldala) dönti el, mi kap nevet: 5 km-ig falvak, városok és nagyvárosok; 15 km-ig csak városok és nagyvárosok; afölött csak nagyvárosok (`MapStyles.placeLevel`). Messziről a falunevek csak zsúfolnának. A méret rögzített és a kép szélességéhez mért (1080 px-en nagyváros 40, város 34, falu 28 px), félkövér, sötét térképen világos, világoson sötét színnel és ellentétes körvonallal. A nevek minden nagyításnál látszanak (az alapstílus 14–15-ös nagyítás fölött elrejtené őket, de a videó kamerája onnan is egész vidéket lát);
+- **településnevek:** az alapstílus saját településnevei kimaradnak; a neveket a poszter rajzolója írja ki (lásd lent, „Településnevek”);
 - a domborzati árnyékolás a vonalak és feliratok alá kerül;
 - **videóban** az utcák középvonala a paletta színét kapja, a lapos épületeket 3D-s (`fill-extrusion`) épületek váltják a valódi magasságukkal (`render_height`), 13-as szinttől.
 
@@ -80,6 +81,27 @@ Minden stílus domborzati és vektoros adatból készül, ezért bármilyen köz
 **Kipróbált, de elvetett:**
 - szintvonalak (maplibre-contour): látványosak voltak, de utcák és épületek kellettek helyettük, és lapos terepen lassítottak;
 - „hajnal” (a valódi napállással megvilágított terep) és „neon” (magasság szerint színezett terep): helyettük egy, a témaszínt enyhén átvevő változat készült.
+
+## Településnevek (`PlaceLabels`)
+
+A neveket nem a térkép, hanem a poszter rajzolója írja ki, ugyanúgy, mint az útvonalat. A MapLibre saját feliratai a kép szélén félig kilógtak, a cím vagy az adatok alá kerülhettek, és nem lehetett kikényszeríteni, hogy a kiinduló település látsszon.
+
+**Honnan:** a térkép betöltött csempéinek „place” rétegéből (`MapView.places`, `querySourceFeatures`; a stílusnak nem kell megjelenítenie). Név, típus (nagyváros, város, falu) és a térképadat fontossági rangja. Képnél a kész térképről, videónál az előtöltés végén, egyszer gyűjtjük be; videónál képkockánként vetítjük.
+
+**Mely nevek:**
+- **Szint az átfogott terület szerint** (a befoglaló téglalap hosszabbik oldala, `MapStyles.placeLevel`): 5 km-ig falvak, városok és nagyvárosok; 40 km-ig városok és nagyvárosok; afölött csak nagyvárosok.
+- **Ritkítás:** legfeljebb 7 / 6 / 5 név (falu- / város- / nagyvárosszint), egymástól legalább 28 egységnyi hellyel; fontossági sorrendben (nagyváros, város, falu, majd rang), így ütközésnél a fontosabb marad.
+- **Kiinduló település:** a (privacy zone utáni) kezdőponthoz legközelebbi név 4 km-en belül, bármilyen kicsi. Mindig elsőként kerül ki; ha a pontja a térképsáv szélén vagy kicsit azon kívül van, a név beljebb csúszik.
+
+**Hol:** csak a térképsávban: a cím alatt és a magasságprofil / adatok fölött, a kép szélétől a margónyira. Ami ebből kilógna, nem jelenik meg. Videón a sáv szélén elhalványulnak, hogy ne villanjanak be.
+
+**Megjelenés:** a poszter címkebetűjével, nagybetűvel, nagyváros 30, város 25, falu 22 egység, 85%-os erősséggel, ellentétes színű körvonallal (sötét térképen világos, világoson sötét).
+
+## Kiemelt pillanatok (`RouteHighlights`, 30 mp-es videó)
+
+30 mp-es videónál a szerkesztőben megjelenik a „Pillanatok a videón” rész: csúcssebesség (futásnál tempóként), max. pulzus, max. teljesítmény, legmagasabb pont, amelyikhez van adat. A kiválasztottak a videón akkor jelennek meg, amikor a nyomvonal „feje” odaér: egy pont az útvonalon és egy kártya a címkével és az értékkel (a kép adatai között szereplő értékkel). A kártya a pont fölé kerül, ha ott nincs hely, alá, ha ott sem, feljebb vagy lejjebb lép; ha sehol nincs hely, csak a pont látszik.
+
+Adatvédelem: a privacy zone-ba eső csúcsokat nem mutatjuk, mert elárulnák a rejtett kezdő- vagy végpontot. A sebességcsúcs simított GPS-sebességből jön (vagy a készülék saját sebességadatából), hogy egyetlen GPS-ugrás ne legyen csúcs.
 
 ## Olvashatóság és kontraszt (WCAG 2.2 AA)
 
@@ -151,6 +173,8 @@ Miért: a kamera messziről követ, így ha az útvonal irányát követné, az 
 **Kamera-magasság (`computeGround`):** a rögzített magasság zajos (pontról pontra méterek), és a domborzat-kiemelés ezt megsokszorozza. Közvetlenül követve az egész kép fel-le billegett. Ezért a kamera egy simított magasságot céloz: nagyjából a kamera által látott szakaszra átlagolva (legfeljebb az útvonal ±15%-ára, háromszoros dobozszűrővel, ami közel Gauss-szerű). A nagy dombokat így is követi, a zajt nem.
 
 Mérve: követés közben legfeljebb 0,2° fordulás és 1 m-nél kisebb magasságváltozás képkockánként (20 mp, 30 fps).
+
+**A kamera pontos helye:** a MapLibre alapból a térkép középpontját a domborzathoz „ragasztja” (`centerClampedToGround`). Ha közben megérkezett egy domborzati csempe, a középpont magasságát átírta, a nagyítást viszont nem, így a kamera észrevétlenül elmozdult: a térkép megugrott, a ráírt útvonal elcsúszott rajta. Ezért ez ki van kapcsolva, a kamera magasságát mi adjuk meg. Lejátszáskor a térkép a kamera beállítása után azonnal újrarajzolódik (`MapView.renderNow`), így a térkép és a felirat ugyanazt a pillanatot mutatja (különben a térkép egy képkockával lemaradt).
 
 **Kamera elhelyezése (`MapView.setCamera`):**
 - a célpont mögött, a dőlésnek megfelelő magasságban áll, és `calculateCameraOptionsFromTo`-val néz a célpontra;

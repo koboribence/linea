@@ -4,7 +4,8 @@ import { UnitFormatter } from '../format/UnitFormatter';
 import type { ElevationProfile } from '../route/ElevationProfile';
 import type { RouteShape, ScreenPoint } from '../route/RouteShape';
 import type { MessageKey } from '../../i18n/messages/hu';
-import { MapStyles, type MapContrast, type MapKind } from '../map/MapStyles';
+import { MapStyles, type MapContrast, type MapKind, type PlaceLevel } from '../map/MapStyles';
+import type { ScreenPlace } from '../map/PlaceLabels';
 import type { PhotoSettings } from './PhotoPlacement';
 import { PosterFonts, type PosterFont } from './PosterFont';
 import type { PosterDesign } from './PosterDesign';
@@ -27,6 +28,16 @@ export interface PhotoImage {
 }
 
 /** Everything the renderer draws, already translated and formatted. */
+/** A peak on the route: its label and value, where it is on the image, how visible yet. */
+export interface HighlightMark {
+  label: string;
+  value: string;
+  unit: string;
+  x: number;
+  y: number;
+  opacity: number;
+}
+
 export interface PosterScene {
   width: number;
   height: number;
@@ -50,6 +61,11 @@ export interface PosterScene {
     route?: ScreenPoint[];
     /** False when the route's start is out of view (no start ring then) */
     showStart?: boolean;
+    /** Places on the image, for town names; `placeLevel` is the smallest kind named */
+    places?: ScreenPlace[];
+    placeLevel?: PlaceLevel;
+    /** Peaks pointed out on the route (video) */
+    highlights?: HighlightMark[];
     attribution: string[];
     /** Map colors that text and the route must stand out from */
     contrast: MapContrast;
@@ -75,7 +91,15 @@ export interface SceneInput {
   /** The user's background photo, if any */
   photo?: PhotoImage;
   /** Use the 3D map as background: the rendered still (none for video) and the projected route */
-  map?: { kind: MapKind; image?: PhotoImage; route?: ScreenPoint[]; showStart?: boolean };
+  map?: {
+    kind: MapKind;
+    image?: PhotoImage;
+    route?: ScreenPoint[];
+    showStart?: boolean;
+    places?: ScreenPlace[];
+    placeLevel?: PlaceLevel;
+    highlights?: HighlightMark[];
+  };
   brandName: string;
 }
 

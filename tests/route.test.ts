@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { Activity } from '../src/domain/activity/Activity';
 import { ElevationProfile } from '../src/domain/route/ElevationProfile';
 import { PrivacyZone } from '../src/domain/route/PrivacyZone';
+import { RouteHighlights } from '../src/domain/route/RouteHighlights';
 import { RouteShape } from '../src/domain/route/RouteShape';
 import { RouteSimplifier } from '../src/domain/route/RouteSimplifier';
-import { loadFixture } from './helpers';
+import { loadFixture, syntheticActivity } from './helpers';
 
 describe('PrivacyZone', () => {
   const distances = [0, 100, 200, 300, 400, 500, 600, 700, 800];
@@ -75,5 +76,47 @@ describe('ElevationProfile', () => {
 
     const flat = await loadFixture('garmin-edge-820-bike.fit');
     expect(ElevationProfile.fromActivity(flat)).toBeUndefined();
+  });
+});
+
+describe('RouteHighlights', () => {
+  it('finds where the peaks happened, along the shown route', async () => {
+    const ride = await loadFixture('Edge810-Vector-2013-08-16-15-35-10.fit');
+    const route = RouteShape.fromActivity(ride, new PrivacyZone(200), 'speed')!;
+    const highlights = RouteHighlights.find(ride, route.geo);
+    expect(highlights.map((h) => h.id)).toEqual([
+      'maxSpeed',
+      'maxHeartRate',
+      'maxPower',
+      'highestPoint',
+    ]);
+    for (const h of highlights) {
+      expect(h.progress).toBeGreaterThanOrEqual(0);
+      expect(h.progress).toBeLessThanOrEqual(1);
+    }
+    // The highest point is where the recorded elevation peaks
+    const top = Math.max(...ride.points.flatMap((p) => (p.ele === undefined ? [] : [p.ele])));
+    const at = highlights.find((h) => h.id === 'highestPoint')!.lngLat;
+    const point = ride.points.find((p) => p.lon === at[0] && p.lat === at[1])!;
+    expect(point.ele).toBe(top);
+  });
+
+  it('ignores peaks inside the privacy zone', () => {
+    // 10 m steps north; the highest heart rate is 10 m from the hidden start
+    const points = Array.from({ length: 60 }, (_, i) => ({
+      lat: 47.5 + i * 0.00009,
+      lon: 19,
+      heartRate: i === 1 ? 190 : i === 30 ? 170 : 140,
+    }));
+    const activity = syntheticActivity('ride', points);
+    const route = RouteShape.fromActivity(activity, new PrivacyZone(200), 'solid')!;
+    const heart = RouteHighlights.find(activity, route.geo).find((h) => h.id === 'maxHeartRate')!;
+    expect(heart.lngLat).toEqual([19, points[30]!.lat]);
+  });
+
+  it('shows runners their top speed as pace', () => {
+    expect(RouteHighlights.statFor('maxSpeed', 'run')).toBe('bestPace');
+    expect(RouteHighlights.statFor('maxSpeed', 'ride')).toBe('maxSpeed');
+    expect(RouteHighlights.statFor('highestPoint', 'run')).toBe('maxElevation');
   });
 });

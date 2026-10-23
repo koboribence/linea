@@ -13,12 +13,14 @@ import { StatPresenter } from '../../domain/format/StatPresenter';
 import { FlyoverPath } from '../../domain/map/FlyoverPath';
 import { LiveStats } from '../../domain/map/LiveStats';
 import { MapFraming } from '../../domain/map/MapFraming';
-import type { PosterDesign } from '../../domain/poster/PosterDesign';
+import { PlaceLabels } from '../../domain/map/PlaceLabels';
+import { PosterDefaults, type PosterDesign } from '../../domain/poster/PosterDesign';
 import { POSTER_FORMATS } from '../../domain/poster/PosterFormat';
 import { PosterFonts } from '../../domain/poster/PosterFont';
 import { PosterRenderer } from '../../domain/poster/PosterRenderer';
 import type { PosterScene, PosterSceneBuilder } from '../../domain/poster/PosterScene';
 import type { ElevationProfile } from '../../domain/route/ElevationProfile';
+import { RouteHighlights, type Highlight } from '../../domain/route/RouteHighlights';
 import type { RouteShape } from '../../domain/route/RouteShape';
 import type { ActivityStats } from '../../domain/stats/ActivityStats';
 import { useLocale } from '../../i18n/LocaleContext';
@@ -34,6 +36,8 @@ export interface FlyoverInput {
   route: RouteShape;
   elevation?: ElevationProfile;
   builder: PosterSceneBuilder;
+  /** Where the activity's peaks happened (pointed out in long videos) */
+  highlights: Highlight[];
 }
 
 export interface FlyoverRefs {
@@ -47,6 +51,8 @@ export interface FlyoverRefs {
 
 /** Route is drawn up to this many camera distances away. */
 const HAZE_FACTOR = 1.6;
+/** A peak's mark fades in over this much of the route after the head passes it. */
+const HIGHLIGHT_FADE = 0.02;
 /** While exporting, every n-th finished frame is shown in the preview. */
 const SHOW_EVERY_FRAME = 3;
 /** Preview drawing resolution relative to the output: never below this, never above 1. */
@@ -74,7 +80,7 @@ export type PreviewState =
  */
 export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale: number) {
   const { activity, stats, design, route, elevation, builder } = input;
-  const { format } = useLocale();
+  const { format, i18n } = useLocale();
   const { width, height } = POSTER_FORMATS[design.format];
 
   const path = useMemo(() => FlyoverPreview.pathFor(route, width, height), [route, width, height]);
@@ -116,12 +122,38 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
       ? { status: 'preparing', share: preview.share }
       : { status: preview.status };
 
+  // Town names: the places the preview found, the start one marked
+  const places = FlyoverPreview.placesFor(key);
+  const level = setup.look.places;
+  const named = useMemo(() => {
+    if (!places) return [];
+    const start = PlaceLabels.startPlace(places, route.geo.coordinates[0]!);
+    return PlaceLabels.relevant(places, level, start).map((place) => ({
+      place,
+      start: place === start,
+    }));
+  }, [places, level, route]);
+
   // The stats at their final values: the layout is measured on them, so counters never move it
   const finalStats = useMemo(() => {
     const statItems = presenter.groups(activity, stats).flatMap((g) => g.items);
     return builder.build({ activity, design, statItems, route, elevation, brandName: BRAND.name })
       .stats;
   }, [presenter, activity, stats, builder, design, route, elevation]);
+
+  // The peaks the user picked, with their label and value (long videos only)
+  const marks = useMemo(() => {
+    if (design.videoSeconds < PosterDefaults.HIGHLIGHT_MIN_SECONDS) return [];
+    const items = presenter.groups(activity, stats).flatMap((g) => g.items);
+    return input.highlights.flatMap((highlight) => {
+      const stat = items.find(
+        (s) => s.id === RouteHighlights.statFor(highlight.id, activity.sport),
+      );
+      if (!design.highlights.includes(highlight.id) || !stat) return [];
+      const label = i18n.t(`highlight.${highlight.id}`);
+      return [{ highlight, label, value: stat.value, unit: stat.unit }];
+    });
+  }, [design, presenter, activity, stats, input.highlights, i18n]);
 
   // Route, text and stats over a map at moment t: same layout as the image,
   // with the route drawing itself and counters ticking up
@@ -132,6 +164,22 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
       // Far ahead the map fades into haze; a crisp line there would only clutter the sky
       const projected = map.project(partial.coordinates, shot.distance * HAZE_FACTOR);
       const routePoints = toScreenRoute(projected, partial.values);
+      const placePoints = map.project(
+        named.map(({ place }) => place.lngLat),
+        shot.distance * HAZE_FACTOR,
+      );
+      const screenPlaces = named.flatMap(({ place, start }, i) => {
+        const point = placePoints[i];
+        return point ? [{ ...place, ...point, start }] : [];
+      });
+      // A peak appears when the route's head passes it, and stays
+      const reached = marks.filter(({ highlight }) => shot.progress >= highlight.progress);
+      const markPoints = map.project(reached.map(({ highlight }) => highlight.lngLat));
+      const highlights = reached.flatMap(({ highlight, label, value, unit }, i) => {
+        const point = markPoints[i];
+        const opacity = Math.min(1, (shot.progress - highlight.progress) / HIGHLIGHT_FADE);
+        return point ? [{ label, value, unit, ...point, opacity }] : [];
+      });
       const finished = t >= FlyoverPath.OUTRO_START;
       const current = finished ? stats : live.snapshot(shot.progress, stats);
       const statItems = presenter.groups(activity, current).flatMap((g) => g.items);
@@ -141,7 +189,14 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
         statItems,
         route,
         elevation,
-        map: { kind: 'flyover', route: routePoints, showStart: projected[0] !== undefined },
+        map: {
+          kind: 'flyover',
+          route: routePoints,
+          showStart: projected[0] !== undefined,
+          places: screenPlaces,
+          placeLevel: level,
+          highlights,
+        },
         brandName: BRAND.name,
       });
       return {
@@ -151,7 +206,21 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
         statsSizing: finalStats,
       };
     },
-    [path, live, stats, presenter, activity, builder, design, route, elevation, finalStats],
+    [
+      path,
+      live,
+      stats,
+      presenter,
+      activity,
+      builder,
+      design,
+      route,
+      elevation,
+      finalStats,
+      named,
+      level,
+      marks,
+    ],
   );
 
   // Text needs its fonts before the first frame; fallback letters would flash otherwise
@@ -216,6 +285,8 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
     (t: number) => {
       if (!view || !fontsLoaded) return;
       view.setCamera(path.shotAt(t));
+      // Map and overlay in the same frame: otherwise the route seems to slide on the map
+      view.renderNow();
       if (refs.overlay.current) PosterRenderer.render(refs.overlay.current, sceneAt(view, t));
     },
     [view, fontsLoaded, path, sceneAt, refs],

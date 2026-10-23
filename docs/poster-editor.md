@@ -88,6 +88,7 @@ Ismeretlen vagy régi azonosítók a tárolóból egyszerűen kimaradnak.
 ### Cím
 
 - **Alapérték:** a fájlban szereplő név (FIT: `sport.name`, GPX: `trk > name`), 50 karakterre vágva. Ha nincs ilyen, az automatikus cím jelenik meg („Délutáni kerékpározás”), amely nyelvváltáskor követi a nyelvet.
+- **Név nélküli fájl:** a legtöbb FIT fájlnak nincs neve; ilyenkor a cím mező az automatikus címmel indul (pl. „Reggeli kerékpározás”), és szerkeszthető.
 - **Karakterkorlát:** a [Graphemes](../src/domain/format/Graphemes.ts) a látható karaktereket számolja (`Intl.Segmenter`). Így a 🏃‍♂️ egy karakter, és a vágás sem töri ketté. A beviteli mező mellett számláló látszik (pl. `12/50`).
 - **Emojik a képen:** a cím betűtípus-listájában emoji betűtípusok is szerepelnek (Apple, Segoe UI, Noto Color Emoji), ezért a canvas színes emojit rajzol, nem üres négyzetet.
 

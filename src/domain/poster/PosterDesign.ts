@@ -4,6 +4,7 @@ import { Graphemes } from '../format/Graphemes';
 import type { StatId } from '../format/StatPresenter';
 import type { RouteColoring } from '../route/RouteShape';
 import { MapStyles, type VideoStyleId } from '../map/MapStyles';
+import { RouteHighlights, type HighlightId } from '../route/RouteHighlights';
 import { PhotoPlacement, type PhotoSettings } from './PhotoPlacement';
 import { PosterFonts, type FontId } from './PosterFont';
 import type { PosterFormatId } from './PosterFormat';
@@ -44,6 +45,8 @@ export interface PosterDesign {
   mapStyle: VideoStyleId;
   /** Length of the flyover video, seconds */
   videoSeconds: number;
+  /** Moments pointed out on the route in 30 s videos (top speed, max heart rate…) */
+  highlights: HighlightId[];
 }
 
 export type BackgroundKind = 'theme' | 'map' | 'photo';
@@ -102,7 +105,11 @@ export class PosterDefaults {
     background: 'theme',
     mapStyle: 'neutral',
     videoSeconds: 20,
+    highlights: [],
   };
+
+  /** Videos at least this long have time to point out highlights along the route. */
+  static readonly HIGHLIGHT_MIN_SECONDS = 30;
 
   static readonly VIDEO_LENGTHS: readonly number[] = [10, 20, 30];
 
@@ -137,6 +144,8 @@ export class PosterDefaults {
       videoSeconds: PosterDefaults.VIDEO_LENGTHS.includes(merged.videoSeconds)
         ? merged.videoSeconds
         : PosterDefaults.STYLE.videoSeconds,
+      // Stored before highlights existed, or with ones that no longer do
+      highlights: (merged.highlights ?? []).filter((id) => RouteHighlights.IDS.includes(id)),
       statsSport: activity.sport,
       stats:
         sameSport && rememberedStats?.length

@@ -1,5 +1,6 @@
 import { FlyoverPath } from '../../domain/map/FlyoverPath';
 import { MapFraming } from '../../domain/map/MapFraming';
+import type { Place } from '../../domain/map/PlaceLabels';
 import { MapStyles, type MapLook, type MapPalette, type MapTone } from '../../domain/map/MapStyles';
 import type { PosterDesign } from '../../domain/poster/PosterDesign';
 import { POSTER_FORMATS } from '../../domain/poster/PosterFormat';
@@ -41,6 +42,8 @@ export class FlyoverPreview {
   /** Changes whenever the prepared preview or its progress changes (for React) */
   private static version = 0;
   private static readonly watchers = new Set<() => void>();
+  /** Places found by the last prepared preview, kept for the export after it is released */
+  private static lastPlaces?: { key: string; places: Place[] };
   private static readonly routeIds = new WeakMap<RouteShape, number>();
   private static nextRouteId = 1;
 
@@ -74,6 +77,12 @@ export class FlyoverPreview {
   };
 
   static getVersion = (): number => FlyoverPreview.version;
+
+  /** Named places in the area of these settings, once a preview has loaded them. */
+  static placesFor(key: string): Place[] | undefined {
+    const last = FlyoverPreview.lastPlaces;
+    return last?.key === key ? last.places : undefined;
+  }
 
   private static changed(): void {
     FlyoverPreview.version++;
@@ -205,6 +214,8 @@ export class FlyoverPreview {
         (share) => this.update('preparing', share),
         this.abort.signal,
       );
+      // Every tile of the flight is loaded now: all the places it will pass are known
+      FlyoverPreview.lastPlaces = { key: this.key, places: view.places() };
       this.update('ready', 1);
     } catch (error) {
       if (this.abort.signal.aborted) return;
