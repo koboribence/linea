@@ -53,6 +53,8 @@ export interface FlyoverRefs {
 const HAZE_FACTOR = 1.6;
 /** A peak's mark fades in over this much of the route after the head passes it. */
 const HIGHLIGHT_FADE = 0.02;
+/** The flat video draws the route until this moment, then holds on the finished one. */
+const FLAT_DRAWN_AT = 0.85;
 /** While exporting, every n-th finished frame is shown in the preview. */
 const SHOW_EVERY_FRAME = 3;
 /** Preview drawing resolution relative to the output: never below this, never above 1. */
@@ -96,13 +98,15 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
   const setupRef = useRef(setup);
   setupRef.current = setup;
   const key = FlyoverPreview.keyOf(setup);
+  // Each new attempt (the retry button, or the connection coming back) prepares the map again
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const host = refs.host.current;
     if (exporting || !host) return;
     const preview = FlyoverPreview.prepare(setupRef.current);
     preview.mountIn(host);
     return () => preview.unmount();
-  }, [refs.host, key, exporting]);
+  }, [refs.host, key, exporting, attempt]);
   const current = FlyoverPreview.current;
   const preview = !exporting && current?.key === key ? current : undefined;
 
@@ -116,6 +120,17 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
   }, [preview, displayScale]);
 
   const view = preview?.status === 'ready' ? preview.view : undefined;
+
+  // Without the 3D map (no connection, no WebGL) the person may pick a flat, top-down video.
+  // The 3D map always wins: once it loads (e.g. the connection is back), it takes over again.
+  const [flatChosen, setFlatChosen] = useState(false);
+  const flat = flatChosen && view === undefined;
+  const retry3d = useCallback(() => setAttempt((n) => n + 1), []);
+  useEffect(() => {
+    if (!flat) return;
+    window.addEventListener('online', retry3d);
+    return () => window.removeEventListener('online', retry3d);
+  }, [flat, retry3d]);
   const previewState: PreviewState = !preview
     ? { status: 'loading' }
     : preview.status === 'preparing'
@@ -247,7 +262,7 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
   useEffect(() => {
     const canvas = refs.backdrop.current;
     const overlay = refs.overlay.current;
-    if (view || exporting || !canvas || !overlay || !backdrop || !fontsLoaded) return;
+    if (view || flat || exporting || !canvas || !overlay || !backdrop || !fontsLoaded) return;
     canvas.width = width;
     canvas.height = height;
     canvas.getContext('2d')?.drawImage(backdrop.image, 0, 0, width, height);
@@ -266,6 +281,7 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
     );
   }, [
     view,
+    flat,
     exporting,
     backdrop,
     fontsLoaded,
@@ -281,6 +297,32 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
     elevation,
   ]);
 
+  // The flat video: the image's 2D route drawing itself on the theme background, counters
+  // ticking up, then a moment on the finished route
+  const flatSceneAt = useCallback(
+    (t: number): PosterScene => {
+      const progress = easeSine(Math.min(1, t / FLAT_DRAWN_AT));
+      const current = progress >= 1 ? stats : live.snapshot(progress, stats);
+      const statItems = presenter.groups(activity, current).flatMap((g) => g.items);
+      const scene = builder.build({
+        activity,
+        design,
+        statItems,
+        route,
+        elevation,
+        brandName: BRAND.name,
+      });
+      return {
+        ...scene,
+        transparent: false,
+        routeProgress: progress,
+        elevationMarker: progress,
+        statsSizing: finalStats,
+      };
+    },
+    [live, stats, presenter, activity, builder, design, route, elevation, finalStats],
+  );
+
   // Playback position 0…1, and whether it's running
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -288,13 +330,15 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
 
   const drawAt = useCallback(
     (t: number) => {
-      if (!view || !fontsLoaded) return;
+      if (!fontsLoaded || !refs.overlay.current) return;
+      if (flat) return PosterRenderer.render(refs.overlay.current, flatSceneAt(t));
+      if (!view) return;
       view.setCamera(path.shotAt(t));
       // Map and overlay in the same frame: otherwise the route seems to slide on the map
       view.renderNow();
-      if (refs.overlay.current) PosterRenderer.render(refs.overlay.current, sceneAt(view, t));
+      PosterRenderer.render(refs.overlay.current, sceneAt(view, t));
     },
-    [view, fontsLoaded, path, sceneAt, refs],
+    [view, flat, fontsLoaded, path, sceneAt, flatSceneAt, refs],
   );
 
   // Paused: show the chosen moment (also redraws when the design changes)
@@ -335,35 +379,37 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
   // Export: on its own full-detail map, off screen; the preview shows the finished frames
   const abort = useRef<AbortController>(undefined);
   const startExport = useCallback(async () => {
-    if (!view) return;
+    if (!view && !flat) return;
     setPlaying(false);
     abort.current = new AbortController();
     setExportState({ status: 'rendering', share: 0 });
     const started = performance.now();
-    // The preview map goes away meanwhile: phones may not have memory for two maps
-    FlyoverPreview.release();
     let map: MapView | undefined;
     try {
-      const { tone, look, palette } = setupRef.current;
       await PosterRenderer.loadFonts(font);
-      map = await MapView.create(FlyoverPreview.offscreen(), {
-        width,
-        height,
-        kind: 'flyover',
-        tone,
-        look,
-        palette,
-        detail: 'full',
-        center: route.geo.coordinates[0]!,
-      });
-      const band = MapFraming.band(width, height);
-      map.setPadding(band.top, height - band.bottom);
+      if (!flat) {
+        // The preview map goes away meanwhile: phones may not have memory for two maps
+        FlyoverPreview.release();
+        const { tone, look, palette } = setupRef.current;
+        map = await MapView.create(FlyoverPreview.offscreen(), {
+          width,
+          height,
+          kind: 'flyover',
+          tone,
+          look,
+          palette,
+          detail: 'full',
+          center: route.geo.coordinates[0]!,
+        });
+        const band = MapFraming.band(width, height);
+        map.setPadding(band.top, height - band.bottom);
+      }
       const exportMap = map;
       let frames = 0;
       const file = await new FlyoverExporter(exportMap).export({
         seconds: design.videoSeconds,
-        moveTo: (t) => exportMap.setCamera(path.shotAt(t)),
-        overlayAt: (t) => sceneAt(exportMap, t),
+        moveTo: (t) => exportMap?.setCamera(path.shotAt(t)),
+        overlayAt: (t) => (exportMap ? sceneAt(exportMap, t) : flatSceneAt(t)),
         signal: abort.current.signal,
         onProgress: (share) => {
           const elapsed = (performance.now() - started) / 1000;
@@ -386,7 +432,19 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
     } finally {
       map?.destroy();
     }
-  }, [view, font, width, height, route, design.videoSeconds, path, sceneAt, refs]);
+  }, [
+    view,
+    flat,
+    font,
+    width,
+    height,
+    route,
+    design.videoSeconds,
+    path,
+    sceneAt,
+    flatSceneAt,
+    refs,
+  ]);
 
   const cancelExport = useCallback(() => abort.current?.abort(), []);
 
@@ -394,8 +452,12 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
   useEffect(() => setExportState({ status: 'idle' }), [design, route]);
 
   return {
-    ready: view !== undefined,
+    ready: view !== undefined || (flat && fontsLoaded),
     preview: previewState,
+    /** Making the flat video, because the 3D map isn't available */
+    flat,
+    chooseFlat: () => setFlatChosen(true),
+    retry3d,
     width,
     height,
     time,
@@ -407,4 +469,9 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
     cancelExport,
     canExport: FlyoverExporter.isSupported(),
   };
+}
+
+/** Gentle start and end, nearly constant speed in the middle. */
+function easeSine(x: number): number {
+  return -(Math.cos(Math.PI * Math.max(0, Math.min(1, x))) - 1) / 2;
 }

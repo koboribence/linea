@@ -16,6 +16,14 @@ let trimTimer;
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
+// A "your video is ready" notification brings the app's tab back to the front
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window' }).then((windows) => windows[0]?.focus()),
+  );
+});
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   // The planet's index (which data version is current) must stay fresh

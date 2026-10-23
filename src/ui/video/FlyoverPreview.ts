@@ -201,7 +201,7 @@ export class FlyoverPreview {
 
       // The opening view with the whole route, to show while the rest loads
       view.setCamera(path.shotAt(0));
-      await view.settle(10_000);
+      await view.ready(10_000);
       this.abort.signal.throwIfAborted();
       this.backdrop = {
         image: await createImageBitmap(view.canvas),

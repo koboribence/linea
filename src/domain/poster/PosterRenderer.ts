@@ -1,7 +1,7 @@
 import type { PlaceLevel } from '../map/MapStyles';
 import { PlaceLabels } from '../map/PlaceLabels';
 import type { ElevationProfile } from '../route/ElevationProfile';
-import type { Box, ScreenPoint } from '../route/RouteShape';
+import { RouteShape, type Box, type ScreenPoint } from '../route/RouteShape';
 import { Graphemes } from '../format/Graphemes';
 import { Color } from './Color';
 import { PhotoPlacement } from './PhotoPlacement';
@@ -13,7 +13,7 @@ const BASE_WIDTH = 1080;
 /** Town name sizes by kind of place, in units */
 const PLACE_NAME_SIZE: Record<PlaceLevel, number> = { city: 30, town: 25, village: 22 };
 /** Town names are a little subdued: part of the map, not of the poster's text */
-const PLACE_NAME_OPACITY = 0.85;
+const PLACE_NAME_OPACITY = 0.7;
 /** Gap between stat columns, in units */
 const STAT_GAP = 32;
 /** The brand wordmark always uses the brand font, whatever font set the poster has */
@@ -314,14 +314,14 @@ export class PosterRenderer {
   /** 2D route: fitted into the middle box. */
   private drawRoute(middle: Box): void {
     const inset = this.scene.routeWidth * this.u * 2;
-    this.drawRoutePoints(
-      this.scene.route!.fitTo({
-        x: middle.x + inset,
-        y: middle.y + inset,
-        width: middle.width - 2 * inset,
-        height: middle.height - 2 * inset,
-      }),
-    );
+    const points = this.scene.route!.fitTo({
+      x: middle.x + inset,
+      y: middle.y + inset,
+      width: middle.width - 2 * inset,
+      height: middle.height - 2 * inset,
+    });
+    const progress = this.scene.routeProgress;
+    this.drawRoutePoints(progress === undefined ? points : RouteShape.cut(points, progress));
   }
 
   /** Draws a route at given screen points: 2D fitted, or projected onto the 3D map. */
@@ -546,7 +546,7 @@ export class PosterRenderer {
       this.setFont(font(size), size * 0.08);
       const text = label.name.toLocaleUpperCase();
       ctx.lineWidth = size * 0.22;
-      ctx.strokeStyle = halo.toRgba(0.75 * label.opacity);
+      ctx.strokeStyle = halo.toRgba(0.6 * label.opacity);
       ctx.strokeText(text, label.x, label.y);
       ctx.fillStyle = color.toRgba(PLACE_NAME_OPACITY * label.opacity);
       ctx.fillText(text, label.x, label.y);

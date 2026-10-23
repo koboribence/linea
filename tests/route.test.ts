@@ -120,3 +120,19 @@ describe('RouteHighlights', () => {
     expect(RouteHighlights.statFor('highestPoint', 'run')).toBe('maxElevation');
   });
 });
+
+describe('RouteShape.cut', () => {
+  it('keeps the first share of a line by length, ending exactly there', () => {
+    const line = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 10 },
+    ];
+    expect(RouteShape.cut(line, 0.25)).toEqual([
+      { x: 0, y: 0 },
+      { x: 5, y: 0 },
+    ]);
+    expect(RouteShape.cut(line, 0.75).at(-1)).toEqual({ x: 10, y: 5 });
+    expect(RouteShape.cut(line, 1)).toEqual(line);
+  });
+});

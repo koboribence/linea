@@ -81,7 +81,7 @@ export class StillMap {
     // The map's focal point moves into the band, the camera distance fits the route into it
     view.setPadding(band.top, height - band.bottom);
     view.setCamera(path.overview(FlyoverPath.STILL_PITCH, 0, (band.bottom - band.top) / height));
-    await view.settle(20000);
+    await view.ready(20000);
 
     const bitmap = await createImageBitmap(view.canvas);
     const places = view.places();

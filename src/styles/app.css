@@ -379,6 +379,59 @@ canvas.video-stage__layer {
   display: none;
 }
 
+/* A choice before going on (e.g. no 3D map) */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(5, 6, 8, 0.7);
+}
+.modal__dialog {
+  display: grid;
+  gap: 14px;
+  width: min(100%, 420px);
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--chalk);
+}
+.modal__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-style: italic;
+  text-transform: uppercase;
+}
+.modal__body p {
+  margin: 0 0 8px;
+  line-height: 1.45;
+}
+.modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.modal__actions .button {
+  flex: 1;
+}
+
+/* The flat video in use instead of the 3D map */
+.flat-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 12px;
+  width: min(100%, calc(var(--preview-height) * var(--ratio, 0.5625)));
+  color: var(--pebble);
+  font-size: 13px;
+  text-align: center;
+}
+
 /* Locked while a video is being made */
 .lockable {
   transition: opacity 0.2s;
@@ -440,6 +493,20 @@ canvas.video-stage__layer {
 .render-overlay__hint {
   color: var(--pebble);
   font-size: 12px;
+}
+.render-overlay__actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+.render-overlay__actions .button {
+  flex: 1;
+  max-width: 220px;
+}
+.render-overlay__notice {
+  color: var(--volt);
+  font-size: 13px;
 }
 
 /* Loading in front of the dimmed opening view */

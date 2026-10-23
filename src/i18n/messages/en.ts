@@ -122,6 +122,14 @@ export const en: Messages = {
   'video.pause': 'Pause',
   'video.timeline': 'Timeline',
   'video.preparingTitle': 'Preparing the video',
+  'flat.title': "The 3D map isn't available right now",
+  'flat.body':
+    "There may be no internet connection, or this browser can't show the 3D map. You can make a simple top-down video instead: the route draws itself like on the image and the numbers count up.",
+  'flat.prefer': 'When the connection is back, we switch back to the 3D map by ourselves.',
+  'flat.retry': 'Try 3D again',
+  'flat.use': 'Simple video',
+  'flat.notice': "Simple top-down video – the 3D map isn't available right now.",
+  'flat.retryShort': 'Back to 3D',
   'highlights.section': 'Moments in the video',
   'highlights.hint': 'The video points out where you reached them, as it gets there.',
   'highlight.maxSpeed': 'Top speed',
@@ -142,8 +150,11 @@ export const en: Messages = {
   'video.share': 'Share',
   'video.failed': "The video couldn't be created. Please try again.",
   'video.unsupported': "This browser can't create videos. Try Chrome, Edge or Safari.",
-  'video.hint':
-    "It's rendered frame by frame, so it takes longer than the video itself, but the result is smooth.",
+  'video.hintDesktop': 'Feel free to switch tabs, the video keeps being made.',
+  'video.hintPhone': 'Stay on this page; the screen stays on meanwhile.',
+  'video.notifyMe': 'Notify me when done',
+  'video.willNotify': "✓ We'll let you know",
+  'video.doneNotice': 'Your video is ready',
 
   'editor.text': 'Text',
   'editor.title': 'Title',

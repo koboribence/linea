@@ -75,6 +75,11 @@ export interface PosterScene {
     /** Map colors that text and the route must stand out from */
     contrast: MapContrast;
   };
+  /**
+   * How much of the 2D route is drawn, 0…1 (the flat video, when the 3D map isn't available);
+   * the route draws itself like the 3D one
+   */
+  routeProgress?: number;
   /** Stats block opacity, for fading it in on video (default 1) */
   statsOpacity?: number;
   /**

@@ -124,6 +124,14 @@ export const hu = {
   'video.timeline': 'Idővonal',
   'video.export': 'Videó készítése',
   'video.preparingTitle': 'Videó előkészítése',
+  'flat.title': 'A 3D térkép most nem érhető el',
+  'flat.body':
+    'Lehet, hogy nincs internetkapcsolat, vagy a böngésző nem tudja megjeleníteni a 3D térképet. Készíthetsz helyette egyszerű, felülnézeti videót: az útvonal a képhez hasonlóan rajzolódik ki, a számok felpörögnek.',
+  'flat.prefer': 'Ha a kapcsolat visszajön, magától visszaváltunk a 3D térképre.',
+  'flat.retry': 'Újrapróbálom a 3D-t',
+  'flat.use': 'Egyszerű videó',
+  'flat.notice': 'Egyszerű, felülnézeti videó – a 3D térkép most nem érhető el.',
+  'flat.retryShort': 'Újra a 3D-vel',
   'highlights.section': 'Pillanatok a videón',
   'highlights.hint': 'A videó megmutatja, hol érted el őket, amikor odaér.',
   'highlight.maxSpeed': 'Csúcssebesség',
@@ -144,8 +152,11 @@ export const hu = {
   'video.failed': 'A videó elkészítése nem sikerült. Próbáld újra.',
   'video.unsupported':
     'Ez a böngésző nem tud videót készíteni. Próbáld Chrome-ban, Edge-ben vagy Safariban.',
-  'video.hint':
-    'Képkockánként készül, ezért tovább tart, mint maga a videó, de az eredmény sima lesz.',
+  'video.hintDesktop': 'Nyugodtan válts másik lapra, a videó közben is készül.',
+  'video.hintPhone': 'Maradj ezen az oldalon; a képernyő közben nem alszik el.',
+  'video.notifyMe': 'Szólj, ha kész',
+  'video.willNotify': '✓ Szólunk, ha kész',
+  'video.doneNotice': 'Elkészült a videód',
 
   'editor.text': 'Szöveg',
   'editor.title': 'Cím',

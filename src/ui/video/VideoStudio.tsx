@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { POSTER_FORMATS } from '../../domain/poster/PosterFormat';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useLockWhile } from '../BusyContext';
+import { Modal } from '../controls/Modal';
 import { PosterExporter } from '../editor/PosterExporter';
+import { canNotify, isTouchDevice, useExportAttention } from './useExportAttention';
 import { useFlyover, type FlyoverInput, type PreviewState } from './useFlyover';
 
 /**
@@ -25,6 +27,11 @@ export function VideoStudio({ input }: { input: FlyoverInput }) {
   const rendering = exportState.status === 'rendering';
   // Nothing else may change while the video is being made
   useLockWhile(rendering);
+  // Asked for a notification when it's done (only matters on another tab)
+  const [notify, setNotify] = useState(
+    () => typeof Notification !== 'undefined' && Notification.permission === 'granted',
+  );
+  useExportAttention(exportState, notify);
   const fileName =
     exportState.status === 'done'
       ? PosterExporter.fileName(input.activity, exportState.file.extension)
@@ -50,25 +57,55 @@ export function VideoStudio({ input }: { input: FlyoverInput }) {
           <canvas
             ref={backdrop}
             className="video-stage__layer"
-            hidden={video.ready && !rendering}
+            hidden={(video.ready && !rendering) || video.flat}
           />
           {/* Hidden while the camera flies around loading the map ahead of playback */}
           <div
             ref={host}
             className="video-stage__layer"
-            style={{ opacity: video.ready && !rendering ? 1 : 0 }}
+            style={{ opacity: video.ready && !rendering && !video.flat ? 1 : 0 }}
           />
           <canvas ref={overlay} className="video-stage__layer" hidden={rendering} />
         </div>
-        <FrameStatus preview={preview} rendering={rendering} />
+        {!video.flat && <FrameStatus preview={preview} rendering={rendering} />}
         {exportState.status === 'rendering' && (
           <RenderOverlay
             share={exportState.share}
             remaining={exportState.remaining}
             onCancel={video.cancelExport}
+            notify={notify}
+            onNotify={setNotify}
           />
         )}
       </div>
+
+      {/* The 3D map couldn't load: offer the flat video, but keep 3D the first choice */}
+      {preview.status === 'failed' && !video.flat && !rendering && (
+        <Modal
+          title={i18n.t('flat.title')}
+          actions={
+            <>
+              <button type="button" className="button button--primary" onClick={video.retry3d}>
+                {i18n.t('flat.retry')}
+              </button>
+              <button type="button" className="button button--secondary" onClick={video.chooseFlat}>
+                {i18n.t('flat.use')}
+              </button>
+            </>
+          }
+        >
+          <p>{i18n.t('flat.body')}</p>
+          <p className="field__hint">{i18n.t('flat.prefer')}</p>
+        </Modal>
+      )}
+      {video.flat && (
+        <div className="flat-notice" role="status">
+          <span>{i18n.t('flat.notice')}</span>
+          <button type="button" className="link-button" onClick={video.retry3d}>
+            {i18n.t('flat.retryShort')}
+          </button>
+        </div>
+      )}
 
       <div className="video-controls">
         <button
@@ -146,8 +183,19 @@ export function VideoStudio({ input }: { input: FlyoverInput }) {
 }
 
 /** While the video is made: big progress over the frames being made, time left, cancel. */
-function RenderOverlay(props: { share: number; remaining?: number; onCancel: () => void }) {
+function RenderOverlay(props: {
+  share: number;
+  remaining?: number;
+  onCancel: () => void;
+  notify: boolean;
+  onNotify: (notify: boolean) => void;
+}) {
   const { i18n } = useLocale();
+  const touch = isTouchDevice();
+  const askToNotify = async () => {
+    const permission = await Notification.requestPermission().catch(() => 'denied');
+    props.onNotify(permission === 'granted');
+  };
   const percent = Math.round(props.share * 100);
   const left = props.remaining;
   const time =
@@ -169,10 +217,25 @@ function RenderOverlay(props: { share: number; remaining?: number; onCancel: () 
         <span style={{ width: `${percent}%` }} />
       </div>
       <span className="render-overlay__time">{time}</span>
-      <span className="render-overlay__hint">{i18n.t('video.hint')}</span>
-      <button type="button" className="button button--secondary" onClick={props.onCancel}>
-        {i18n.t('video.cancel')}
-      </button>
+      <span className="render-overlay__hint">
+        {i18n.t(touch ? 'video.hintPhone' : 'video.hintDesktop')}
+      </span>
+      <div className="render-overlay__actions">
+        {/* On a computer one can switch tabs meanwhile; a notification says when it's done */}
+        {!touch &&
+          (props.notify ? (
+            <span className="render-overlay__notice">{i18n.t('video.willNotify')}</span>
+          ) : (
+            canNotify() && (
+              <button type="button" className="link-button" onClick={() => void askToNotify()}>
+                {i18n.t('video.notifyMe')}
+              </button>
+            )
+          ))}
+        <button type="button" className="button button--secondary" onClick={props.onCancel}>
+          {i18n.t('video.cancel')}
+        </button>
+      </div>
     </div>
   );
 }

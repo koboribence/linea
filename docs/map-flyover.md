@@ -97,7 +97,7 @@ A neveket nem a térkép, hanem a poszter rajzolója írja ki, ugyanúgy, mint a
 
 **Kapcsoló:** „Településnevek” a 3D térkép hátterénél és a videó beállításainál (`showPlaces`, alapból be).
 
-**Megjelenés:** a poszter címkebetűjével, nagybetűvel, nagyváros 30, város 25, falu 22 egység, 85%-os erősséggel, ellentétes színű körvonallal (sötét térképen világos, világoson sötét).
+**Megjelenés:** a poszter címkebetűjével, nagybetűvel, nagyváros 30, város 25, falu 22 egység, 70%-os erősséggel (a körvonal 60%), ellentétes színű körvonallal (sötét térképen világos, világoson sötét). Visszafogottak: a térkép részei, nem a poszter szövegéé.
 
 ## Kiemelt pillanatok (`RouteHighlights`, 30 mp-es videó)
 
@@ -241,7 +241,7 @@ Külön, rejtett, teljes részletességű térképen (`detail: 'full'`, `pixelRa
 Képkockánként, nem valós időben:
 
 1. `moveTo(t)`: kamera beállítása;
-2. `settle()`: várakozás, amíg minden csempe betölt (`idle`, legfeljebb 5 mp);
+2. `ready()`: a térkép azonnal kirajzolja a nézetet; ha minden csempe megvan, kész, különben megvárja a következő érkező csempét, és újra próbálja (legfeljebb 5 mp);
 3. `overlayAt(t)`: az útvonal kivetítése a már betöltött domborzatra, majd a felirat-réteg;
 4. a térkép és a felirat összeolvasztása egy vásznon;
 5. a kép átadása a kódolónak (és az előnézetnek, `onFrame`).
@@ -251,9 +251,37 @@ Képkockánként, nem valós időben:
 - **Felbontás:** 30 fps, a választott formátum mérete (pl. 1080×1920).
 - **Hossz:** 10, 20 vagy 30 mp (alapból 20). Egy régebbi, már nem létező hossz (pl. 15) mentve az alapértékre áll vissza.
 
-**Ellenőrizve:** egy 10 mp-es videó 52 mp alatt készült el (valódi videókártya), szabályos MP4 (`ftyp isom`, 10,2 MB).
+**Gyorsítás (`MapView.ready`):** mérve a készítési idő 95%-a a térképre várás volt: képkockánként a MapLibre „kész” (`idle`) jelzésére vártunk, ami további képfrissítési ciklusokat vár ki, akkor is, ha minden csempe megvan. Most a nézet szinkron rajzolódik (`map.redraw()`), és csak akkor várunk, ha `areTilesLoaded()` szerint még hiányzik csempe; ilyenkor a következő `data` eseményre (érkező csempére). A videó térképének külön előtöltése így feleslegessé vált.
+
+Mérve (valódi videókártya, 10 mp-es videó):
+
+| Útvonal | Előtte | Utána |
+|---|---|---|
+| Kerékpár, 120 km (távoli kamera) | 50 mp | **7 mp** |
+| Kerékpár, 41 km | – | **8 mp** |
+| Futás, 4,7 km (közeli kamera, sok épület) | – | **11 mp** |
+
+Képkockánként visszajátszva egyik videóban sincs ugrás, a képkockák teljesek (domborzat, épületek, nevek). Mellékhatásként a készítés háttérlapon is halad, mert már nem függ a képfrissítési ciklustól (`requestAnimationFrame`), amit a böngésző háttérlapon leállít.
+
+**Ellenőrizve:** szabályos MP4 (`ftyp isom`).
 
 **Telefon:** lassabb lehet. Mivel minden képkocka megvárja a térképet, az eredmény akkor is sima.
+
+## Várakozás közben (`useExportAttention`)
+
+A cél, hogy a felhasználónak ne kelljen a haladásjelzőt néznie. Az ajánlások szerint 10 mp-nél hosszabb várakozásnál pontos haladás kell (százalék, hátralévő idő), és a legjobb, ha közben máshol lehet, és szólunk, ha kész. Mivel minden a böngészőben fut, ez így valósul meg:
+
+- **Nagy haladásjelző** az előnézet alján: százalék, vastag sáv, becsült hátralévő idő, jól látható Mégse gomb, közben az elkészült képkockák.
+- **Számítógépen:** „Nyugodtan válts másik lapra” – a készítés háttérlapon is halad. A lap címe mutatja a százalékot („45% · Linea”), a végén „✓ Elkészült a videód · Linea”, amíg vissza nem tér. A „Szólj, ha kész” gombbal (csak kérésre kér engedélyt) rendszerértesítést is kap; Androidon a service workeren át (`showNotification`), kattintásra a lap előre jön.
+- **Telefonon:** „Maradj ezen az oldalon” – a képernyő nem alszik el közben (Screen Wake Lock), mert egy elalvó telefon leállítaná a munkát; a végén rövid rezgés.
+
+## Ha a 3D térkép nem érhető el (egyszerű videó)
+
+Ha a 3D térkép nem tölt be (nincs internet, a térképszolgáltató nem elérhető, vagy a böngésző nem tud WebGL-t), egy ablak elmondja, mi történt, és két lehetőséget ad: „Újrapróbálom a 3D-t” (ez az első, alapértelmezett gomb) vagy „Egyszerű videó”.
+
+Az **egyszerű videó** a kép kinézete: témaszínű háttéren a felülnézeti útvonal rajzolódik ki (`routeProgress`, `RouteShape.cut`), a számlálók pörögnek, a magasságprofilon halad a jelölő; a videó 85%-ánál az útvonal kész, utána kitart. Térkép nélkül készül (`FlyoverExporter` térkép nélkül), ezért gyors (10 mp-es videó kb. 3,4 mp alatt).
+
+**A 3D az első:** egyszerű módban egy sáv jelzi, hogy ez nem a 3D változat, „Újra a 3D-vel” gombbal. Ha a böngésző jelzi, hogy visszajött a kapcsolat (`online`), a háttérben magától újrapróbálja, és ha a 3D elkészül, automatikusan arra vált.
 
 ## Tartós csempetár (service worker)
 

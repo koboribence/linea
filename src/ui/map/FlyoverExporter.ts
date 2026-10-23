@@ -26,7 +26,8 @@ export interface ExportOptions {
  * where H.264 encoding isn't available.
  */
 export class FlyoverExporter {
-  constructor(private readonly view: MapView) {}
+  /** Without a map (`undefined`), the frames are the overlay alone: the flat, top-down video. */
+  constructor(private readonly view?: MapView) {}
 
   /** True when this browser can encode video at all (WebCodecs). */
   static isSupported(): boolean {
@@ -72,10 +73,11 @@ export class FlyoverExporter {
         if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
         const t = total > 1 ? i / (total - 1) : 1;
         moveTo(t);
-        // The overlay comes after loading: the route is projected onto the finished terrain
-        await this.view.settle();
-
-        ctx.drawImage(this.view.canvas, 0, 0, width, height);
+        if (this.view) {
+          // The overlay comes after loading: the route is projected onto the finished terrain
+          await this.view.ready();
+          ctx.drawImage(this.view.canvas, 0, 0, width, height);
+        }
         PosterRenderer.render(overlay, overlayAt(t));
         ctx.drawImage(overlay, 0, 0);
         onFrame?.(frame);

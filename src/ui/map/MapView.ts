@@ -223,7 +223,7 @@ export class MapView {
     for (const [i, shot] of shots.entries()) {
       signal.throwIfAborted();
       this.setCamera(shot);
-      await this.settle(8000);
+      await this.ready(8000);
       onProgress((i + 1) / shots.length);
     }
   }
@@ -279,16 +279,31 @@ export class MapView {
     return forward > MIN_FORWARD && Math.hypot(dx, dy) < maxDistance;
   }
 
-  /** Resolves when everything in view has loaded and rendered (or after a timeout). */
-  settle(timeoutMs = 5000): Promise<void> {
+  /**
+   * Draws the current view right away and resolves once every tile in it is loaded and drawn
+   * (or after a timeout). Faster than waiting for 'idle', which costs extra animation frames,
+   * and it keeps working in a background tab, where the browser stops animation frames.
+   */
+  async ready(timeoutMs = 5000): Promise<void> {
+    const deadline = performance.now() + timeoutMs;
+    for (;;) {
+      // Drawing also asks for the tiles this view still needs
+      this.map.redraw();
+      if (this.map.areTilesLoaded() || performance.now() >= deadline) return;
+      await this.nextData(deadline - performance.now());
+    }
+  }
+
+  /** Resolves when the next tile (or other map data) arrives, or after `timeoutMs`. */
+  private nextData(timeoutMs: number): Promise<void> {
     return new Promise((resolve) => {
       const done = () => {
         clearTimeout(timer);
+        this.map.off('data', done);
         resolve();
       };
-      const timer = setTimeout(done, timeoutMs);
-      this.map.once('idle', done);
-      this.map.triggerRepaint();
+      const timer = setTimeout(done, Math.max(0, timeoutMs));
+      this.map.on('data', done);
     });
   }
 

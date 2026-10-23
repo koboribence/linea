@@ -122,6 +122,30 @@ export class RouteShape {
     }));
   }
 
+  /** The first `share` of a line by its length, ending exactly there (the head of the route). */
+  static cut(points: ScreenPoint[], share: number): ScreenPoint[] {
+    const lengths = [0];
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1]!;
+      const b = points[i]!;
+      lengths.push(lengths[i - 1]! + Math.hypot(b.x - a.x, b.y - a.y));
+    }
+    const target = lengths.at(-1)! * Math.max(0, Math.min(1, share));
+    const kept: ScreenPoint[] = [points[0]!];
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1]!;
+      const b = points[i]!;
+      if (lengths[i]! <= target) {
+        kept.push(b);
+        continue;
+      }
+      const k = (target - lengths[i - 1]!) / (lengths[i]! - lengths[i - 1]! || 1);
+      kept.push({ ...b, x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });
+      break;
+    }
+    return kept;
+  }
+
   private static cumulativeDistances(points: readonly TrackPoint[]): number[] {
     const result = [0];
     for (let i = 1; i < points.length; i++) {
