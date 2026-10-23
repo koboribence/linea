@@ -60,6 +60,8 @@ type Segment = [ax: number, ay: number, bx: number, by: number];
 const ORDER: Record<PlaceLevel, number> = { village: 0, town: 1, city: 2 };
 /** At most this many names, by level: a wide area stays sparse. */
 const MAX_LABELS: Record<PlaceLevel, number> = { village: 7, town: 6, city: 5 };
+/** How far (in steps around its place) the start's name may move to find a free spot. */
+const START_RINGS = 5;
 /** The start place is the nearest named place within this distance of the start, meters. */
 const START_RADIUS = 4000;
 
@@ -143,8 +145,8 @@ export class PlaceLabels {
       if (!PlaceLabels.contains(PlaceLabels.grow(area, reach), place.x, place.y)) continue;
       const { width, height } = measure(place.name, place.kind);
 
-      const spots = PlaceLabels.spots(place, width, height, place.start ? 3 : 1).map((spot) =>
-        place.start ? PlaceLabels.pullInside(spot, width, height, area) : spot,
+      const spots = PlaceLabels.spots(place, width, height, place.start ? START_RINGS : 1).map(
+        (spot) => (place.start ? PlaceLabels.pullInside(spot, width, height, area) : spot),
       );
       const boxAt = ({ x, y }: { x: number; y: number }) => ({
         x: x - width / 2,
@@ -161,7 +163,14 @@ export class PlaceLabels {
       };
       const spot =
         spots.find((candidate) => free(candidate, true)) ??
-        (place.start ? spots.find((candidate) => free(candidate, false)) : undefined);
+        (place.start
+          ? PlaceLabels.leastCovering(
+              spots.filter((c) => free(c, false)),
+              boxAt,
+              route,
+              clearance,
+            )
+          : undefined);
       if (!spot) continue;
 
       const box = boxAt(spot);
@@ -195,9 +204,34 @@ export class PlaceLabels {
         { x: place.x, y: place.y + dy },
         { x: place.x + dx, y: place.y },
         { x: place.x - dx, y: place.y },
+        // Diagonals: often free where the route leaves its start straight up, down or sideways
+        { x: place.x + dx, y: place.y - dy },
+        { x: place.x - dx, y: place.y - dy },
+        { x: place.x + dx, y: place.y + dy },
+        { x: place.x - dx, y: place.y + dy },
       );
     }
     return spots;
+  }
+
+  /** Of the given spots, the one whose name covers the least of the route. */
+  private static leastCovering(
+    spots: { x: number; y: number }[],
+    boxAt: (spot: { x: number; y: number }) => Box,
+    route: Segment[],
+    clearance: number,
+  ): { x: number; y: number } | undefined {
+    let best: { x: number; y: number } | undefined;
+    let bestCount = Infinity;
+    for (const spot of spots) {
+      const box = PlaceLabels.grow(boxAt(spot), clearance);
+      const count = route.filter((segment) => PlaceLabels.crosses(box, [segment])).length;
+      if (count < bestCount) {
+        best = spot;
+        bestCount = count;
+      }
+    }
+    return best;
   }
 
   private static pullInside(

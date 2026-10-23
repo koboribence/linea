@@ -291,6 +291,28 @@ describe('PlaceLabels', () => {
     expect(labels.map((l) => l.name)).toContain('City');
   });
 
+  it("never puts the start name on the start marker when there's room nearby", () => {
+    // A loop starting at its right end, near the top right of the area (like Velence):
+    // the line runs left above the start and back below it
+    const avoid = [
+      { x: 920, y: 380 },
+      { x: 400, y: 330 },
+      { x: 200, y: 600 },
+      { x: 600, y: 560 },
+      { x: 930, y: 400 },
+    ];
+    const [label] = PlaceLabels.choose([place('Velence', 'town', 925, 390, { start: true })], {
+      ...options,
+      avoid,
+      clearance: 19,
+    });
+    expect(label?.name).toBe('Velence');
+    const box = { x: label!.x - 70 - 19, y: label!.y - 15 - 19, width: 140 + 38, height: 30 + 38 };
+    const touches = ({ x, y }: { x: number; y: number }) =>
+      x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height;
+    expect(touches({ x: 925, y: 390 })).toBe(false);
+  });
+
   it('pulls the start name in when its place sits just below the map area', () => {
     const [label] = PlaceLabels.choose(
       [place('Érd', 'town', 500, area.y + area.height + 20, { start: true })],

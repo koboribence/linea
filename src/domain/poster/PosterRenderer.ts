@@ -710,13 +710,14 @@ export class PosterRenderer {
     const step = columnWidth + STAT_GAP * u;
     // A lone stat or a short last row (e.g. 3 + 2) looks balanced only when centered
     const centered = stats.length % columns !== 0 || stats.length === 1;
+    const lefts = centered ? undefined : this.columnLefts(layout);
 
     stats.forEach((stat, i) => {
       const column = i % columns;
       const row = Math.floor(i / columns);
       const inRow = Math.min(columns, stats.length - row * columns);
       const rowShift = ((columns - inRow) * step) / 2;
-      const x = pad + rowShift + column * step;
+      const x = lefts?.[column] ?? pad + rowShift + column * step;
       const top = layout.top + row * layout.rowHeight;
 
       this.setLabelFont(layout.labelSize);
@@ -731,6 +732,31 @@ export class PosterRenderer {
       this.drawValue(stat, valueX, baseline, layout.valueSize, scene.colors.text);
     });
     ctx.globalAlpha = 1;
+  }
+
+  /**
+   * Left edges of full-row columns, so the block sits in the middle: each column as wide as
+   * its widest label or number (final values on video, so nothing moves), the free space
+   * shared equally left, between and right. Undefined when the content doesn't fit that way.
+   */
+  private columnLefts(layout: StatsLayout): number[] | undefined {
+    const { pad, scene } = this;
+    const widths = Array.from({ length: layout.columns }, () => 0);
+    layout.sizing.forEach((stat, i) => {
+      const column = i % layout.columns;
+      const label = this.labelWidth(stat.label, layout.labelSize);
+      const value = this.valueWidth(stat, layout.valueSize);
+      widths[column] = Math.max(widths[column]!, label, value);
+    });
+    const used = widths.reduce((sum, w) => sum + Math.min(w, layout.columnWidth), 0);
+    const space = (scene.width - 2 * pad - used) / (layout.columns + 1);
+    if (space <= 0) return undefined;
+    let x = pad + space;
+    return widths.map((width) => {
+      const left = x;
+      x += Math.min(width, layout.columnWidth) + space;
+      return left;
+    });
   }
 
   private drawLogo(name: string): void {
