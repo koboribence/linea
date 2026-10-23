@@ -105,8 +105,12 @@ export class StillMap {
     look,
     route,
   }: StillRequest): Promise<MapView> {
-    const viewKey = `${width}|${height}|${kind}|${tone}|${MapStyles.lookKey(look)}`;
-    if (this.view && this.viewKey === viewKey) return this.view;
+    // Dark ↔ light reuses the map (same tiles, new layers); anything else needs a new one
+    const viewKey = `${width}|${height}|${kind}|${MapStyles.lookKey(look)}`;
+    if (this.view && this.viewKey === viewKey) {
+      await this.view.restyle(tone, MapStyles.palette(kind, tone));
+      return this.view;
+    }
     this.view?.destroy();
     this.view = undefined;
     if (!this.host) {

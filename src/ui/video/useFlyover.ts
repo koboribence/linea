@@ -111,7 +111,10 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
   const preview = !exporting && current?.key === key ? current : undefined;
 
   // Color and style changes only repaint the running map
-  useEffect(() => preview?.recolor(setup.palette), [preview, setup.palette]);
+  useEffect(
+    () => preview?.restyle(setup.tone, setup.palette),
+    [preview, setup.tone, setup.palette],
+  );
 
   // Draw only as many pixels as the preview shows on screen
   useEffect(() => {

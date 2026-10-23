@@ -313,6 +313,27 @@ describe('PlaceLabels', () => {
     expect(touches({ x: 925, y: 390 })).toBe(false);
   });
 
+  it('finds a free spot for a card: off its point, the route and what is taken', () => {
+    const route = [
+      { x: 100, y: 600 },
+      { x: 980, y: 600 },
+    ];
+    const taken = [{ x: 400, y: 500, width: 200, height: 60 }];
+    const spot = PlaceLabels.freeSpot({ x: 500, y: 600 }, 160, 60, {
+      area,
+      taken,
+      avoid: route,
+      clearance: 10,
+      rings: 3,
+    })!;
+    const box = { x: spot.x - 80, y: spot.y - 30, width: 160, height: 60 };
+    // Not on the line (y 600 ± clearance), not on the taken box above
+    expect(box.y > 610 || box.y + box.height < 590).toBe(true);
+    expect(box.y + box.height <= 500 || box.y >= 560 || box.x >= 600 || box.x + 160 <= 400).toBe(
+      true,
+    );
+  });
+
   it('pulls the start name in when its place sits just below the map area', () => {
     const [label] = PlaceLabels.choose(
       [place('Érd', 'town', 500, area.y + area.height + 20, { start: true })],

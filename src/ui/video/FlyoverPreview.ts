@@ -55,6 +55,7 @@ export class FlyoverPreview {
   private readonly abort = new AbortController();
   private mountedIn?: HTMLElement;
   private palette: MapPalette;
+  private tone: MapTone;
   private pixelRatio = DEFAULT_PIXEL_RATIO;
 
   private constructor(
@@ -62,6 +63,7 @@ export class FlyoverPreview {
     readonly setup: FlyoverSetup,
   ) {
     this.palette = setup.palette;
+    this.tone = setup.tone;
     void this.start();
   }
 
@@ -118,7 +120,7 @@ export class FlyoverPreview {
     const key = FlyoverPreview.keyOf(setup);
     const prepared = FlyoverPreview.prepared;
     if (prepared?.key === key && prepared.status !== 'failed') {
-      prepared.recolor(setup.palette);
+      prepared.restyle(setup.tone, setup.palette);
       return prepared;
     }
     prepared?.destroy();
@@ -134,14 +136,14 @@ export class FlyoverPreview {
     FlyoverPreview.changed();
   }
 
-  /** Only what changes the tiles counts; colors are repainted on the running map. */
-  static keyOf({ route, width, height, tone, look }: FlyoverSetup): string {
+  /** Only what changes the tiles counts; colors and dark/light are restyled on the running map. */
+  static keyOf({ route, width, height, look }: FlyoverSetup): string {
     let id = FlyoverPreview.routeIds.get(route);
     if (id === undefined) {
       id = FlyoverPreview.nextRouteId++;
       FlyoverPreview.routeIds.set(route, id);
     }
-    return [id, width, height, tone, MapStyles.lookKey(look)].join('|');
+    return [id, width, height, MapStyles.lookKey(look)].join('|');
   }
 
   /** Hidden but rendering: maps prepare (or render a video) here. */
@@ -167,9 +169,11 @@ export class FlyoverPreview {
     this.view?.mountIn(FlyoverPreview.offscreen());
   }
 
-  recolor(palette: MapPalette): void {
+  /** New colors, and dark ↔ light, on the running map (see MapView.restyle). */
+  restyle(tone: MapTone, palette: MapPalette): void {
+    this.tone = tone;
     this.palette = palette;
-    this.view?.recolor(palette);
+    void this.view?.restyle(tone, palette).catch(() => undefined);
   }
 
   setPixelRatio(ratio: number): void {
@@ -178,7 +182,8 @@ export class FlyoverPreview {
   }
 
   private async start(): Promise<void> {
-    const { width, height, tone, look, path, route } = this.setup;
+    const { width, height, look, path, route } = this.setup;
+    const tone = this.tone;
     try {
       const view = await MapView.create(this.mountedIn ?? FlyoverPreview.offscreen(), {
         width,
@@ -194,8 +199,8 @@ export class FlyoverPreview {
       if (this.abort.signal.aborted) return view.destroy();
       this.view = view;
       if (this.mountedIn) view.mountIn(this.mountedIn);
-      // Colors may have changed while the map was loading
-      view.recolor(this.palette);
+      // Colors (or dark/light) may have changed while the map was loading
+      await view.restyle(this.tone, this.palette);
       const band = MapFraming.band(width, height);
       view.setPadding(band.top, height - band.bottom);
 

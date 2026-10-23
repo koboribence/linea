@@ -187,6 +187,37 @@ export class PlaceLabels {
     return labels;
   }
 
+  /**
+   * A free spot (its center) for a box of this size near `anchor`: off the anchor itself,
+   * then above, below, beside and diagonal, up to `rings` steps away. Free means inside
+   * `area`, clear of the `taken` boxes and `clearance` away from the route.
+   */
+  static freeSpot(
+    anchor: { x: number; y: number },
+    width: number,
+    height: number,
+    options: {
+      area: Box;
+      taken: Box[];
+      avoid?: { x: number; y: number; newSegment?: boolean }[];
+      clearance?: number;
+      rings: number;
+    },
+  ): { x: number; y: number } | undefined {
+    const route = PlaceLabels.segments(options.avoid ?? []);
+    const clearance = options.clearance ?? 0;
+    return PlaceLabels.spots(anchor, width, height, options.rings)
+      .slice(1)
+      .find((spot) => {
+        const box = { x: spot.x - width / 2, y: spot.y - height / 2, width, height };
+        return (
+          PlaceLabels.inside(options.area, box) &&
+          !options.taken.some((other) => PlaceLabels.overlap(box, other)) &&
+          !PlaceLabels.crosses(PlaceLabels.grow(box, clearance), route)
+        );
+      });
+  }
+
   /** Where a name may go around its place: on it, then above, below, right, left; `rings` deep. */
   private static spots(
     place: { x: number; y: number },

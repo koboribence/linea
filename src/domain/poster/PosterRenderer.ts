@@ -64,6 +64,8 @@ export class PosterRenderer {
   private readonly padTop: number;
   private readonly padBottom: number;
   private readonly accent: Color;
+  /** Town names drawn on this image, which highlight cards keep clear of */
+  private readonly nameBoxes: Box[] = [];
   private readonly font: PosterFont;
 
   private constructor(
@@ -545,6 +547,8 @@ export class PosterRenderer {
       const size = PLACE_NAME_SIZE[label.kind] * u;
       this.setFont(font(size), size * 0.08);
       const text = label.name.toLocaleUpperCase();
+      const width = ctx.measureText(text).width;
+      this.nameBoxes.push({ x: label.x - width / 2, y: label.y - size / 2, width, height: size });
       ctx.lineWidth = size * 0.22;
       ctx.strokeStyle = halo.toRgba(0.6 * label.opacity);
       ctx.strokeText(text, label.x, label.y);
@@ -563,9 +567,11 @@ export class PosterRenderer {
     const bottom = this.footerTop(layout) - 24 * u;
     const bg = Color.parse(scene.colors.background[0]);
     const cards: Box[] = [];
+    const map = scene.map!;
+    const marks = map.highlights!;
     this.noShadow();
 
-    for (const mark of scene.map!.highlights!) {
+    for (const mark of marks) {
       ctx.globalAlpha = mark.opacity;
       const labelSize = 18 * u;
       const valueSize = 44 * u;
@@ -579,32 +585,33 @@ export class PosterRenderer {
       const height = labelSize + 8 * u + valueSize * 0.74 + 2 * padY;
       const gap = 26 * u;
 
-      // Above the dot, else below, else stepped further away; no room at all: just the dot
-      const x = Math.min(Math.max(mark.x - width / 2, pad), scene.width - pad - width);
-      const step = height + 10 * u;
-      const slots = [0, 1, 2].flatMap((k) => [
-        { x, y: mark.y - gap - height - k * step, width, height },
-        { x, y: mark.y + gap + k * step, width, height },
-      ]);
-      const card = slots.find(
-        (box) =>
-          box.y >= top &&
-          box.y + box.height <= bottom &&
-          !cards.some((c) => PosterRenderer.overlap(c, box)),
-      );
-      if (!card) {
+      // Near its dot, clear of the route, town names, other cards and dots; no room: just the dot
+      const dot = (m: { x: number; y: number }) => {
+        const r = 16 * u;
+        return { x: m.x - r, y: m.y - r, width: 2 * r, height: 2 * r };
+      };
+      const spot = PlaceLabels.freeSpot(mark, width + gap / 2, height + gap / 2, {
+        area: { x: pad, y: top, width: scene.width - 2 * pad, height: bottom - top },
+        taken: [...this.nameBoxes, ...cards, ...marks.map(dot)],
+        avoid: map.fullRoute ?? map.route,
+        clearance: (scene.routeWidth / 2 + 8) * u,
+        rings: 3,
+      });
+      if (!spot) {
         this.drawHighlightDot(mark);
         continue;
       }
+      const card = { x: spot.x - width / 2, y: spot.y - height / 2, width, height };
       cards.push(card);
 
-      // Connector, card, then the dot on top
-      const anchorY = card.y > mark.y ? card.y : card.y + card.height;
+      // Connector to the nearest point of the card, card, then the dot on top
+      const toX = Math.min(Math.max(mark.x, card.x), card.x + width);
+      const toY = Math.min(Math.max(mark.y, card.y), card.y + height);
       ctx.strokeStyle = scene.colors.accent;
       ctx.lineWidth = 3 * u;
       ctx.beginPath();
       ctx.moveTo(mark.x, mark.y);
-      ctx.lineTo(Math.min(Math.max(mark.x, card.x + 16 * u), card.x + width - 16 * u), anchorY);
+      ctx.lineTo(toX, toY);
       ctx.stroke();
 
       ctx.fillStyle = bg.toRgba(0.86);
@@ -634,12 +641,6 @@ export class PosterRenderer {
     ctx.arc(mark.x, mark.y, 10 * u, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-  }
-
-  private static overlap(a: Box, b: Box): boolean {
-    return (
-      a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
-    );
   }
 
   /** Data credits the map licenses require, small but legible, at the very bottom. */

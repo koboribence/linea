@@ -78,7 +78,14 @@ export class MapView {
     private readonly exaggeration: number,
     /** Layout size, for telling which projected points are on screen */
     private readonly size: { width: number; height: number },
-  ) {}
+    /** What the style was built from, for switching between dark and light in place */
+    private readonly options: MapViewOptions,
+  ) {
+    this.tone = options.tone;
+  }
+
+  /** The base map in use: dark or light */
+  private tone: MapTone;
 
   /** Starts downloading the map code and base style early, e.g. when a map option is hovered. */
   static preload(): void {
@@ -142,6 +149,7 @@ export class MapView {
       ([lng, lat]) => new LngLat(lng, lat),
       options.look.exaggeration,
       { width: options.width, height: options.height },
+      options,
     );
   }
 
@@ -187,6 +195,23 @@ export class MapView {
    */
   renderNow(): void {
     this.map.redraw();
+  }
+
+  /**
+   * Dark ↔ light (and new colors) on the running map. Both base styles use the same tiles,
+   * so only the layers change: nothing is downloaded again and the loaded flight stays.
+   */
+  async restyle(tone: MapTone, palette: MapPalette): Promise<void> {
+    if (tone === this.tone) return this.recolor(palette);
+    this.tone = tone;
+    const base = await loadBase(tone);
+    const { kind, look, detail } = this.options;
+    this.map.setStyle(MapStyles.build(kind, base, look, palette, detail), { diff: true });
+    // Usually applied at once as a diff; a change the diff can't express means a full style
+    // reload, which says it's done with 'style.load' (a diff never fires that, so don't wait
+    // for it then). isStyleLoaded() won't do: it also waits for tiles.
+    const style = (this.map as unknown as { style?: { _loaded?: boolean } }).style;
+    if (style?._loaded === false) await new Promise((r) => this.map.once('style.load', r));
   }
 
   /** New colors for streets, buildings, relief and sky, without reloading anything. */
