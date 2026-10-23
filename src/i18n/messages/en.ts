@@ -105,6 +105,7 @@ export const en: Messages = {
   'background.theme': 'Color',
   'background.map': '3D map',
   'background.photo': 'Photo',
+  'map.places': 'Town names',
   'map.style': 'Map',
   'mapStyle.neutral': 'Plain',
   'mapStyle.tinted': 'Theme tint',

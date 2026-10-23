@@ -122,11 +122,11 @@ export function usePosterEditor(loaded: Activity, mode: 'image' | 'video' = 'ima
         ...baseScene.map,
         image: still.image,
         route: points,
-        places: still.places,
+        places: design.showPlaces ? still.places : undefined,
         placeLevel: still.placeLevel,
       },
     };
-  }, [baseScene, mapSnapshot.result, route]);
+  }, [baseScene, mapSnapshot.result, route, design.showPlaces]);
 
   /** Resolves to false when the file isn't a readable image. */
   const setPhoto = useCallback(async (file: File): Promise<boolean> => {

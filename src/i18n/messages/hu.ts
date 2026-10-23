@@ -107,6 +107,7 @@ export const hu = {
   'background.map': '3D térkép',
   'background.photo': 'Fotó',
   'map.style': 'Térkép',
+  'map.places': 'Településnevek',
   'mapStyle.neutral': 'Alap',
   'mapStyle.tinted': 'Témaszín',
   'map.loading': 'Térkép betöltése…',

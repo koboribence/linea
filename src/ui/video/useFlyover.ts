@@ -164,6 +164,10 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
       // Far ahead the map fades into haze; a crisp line there would only clutter the sky
       const projected = map.project(partial.coordinates, shot.distance * HAZE_FACTOR);
       const routePoints = toScreenRoute(projected, partial.values);
+      // Where the whole route will go: names keep clear of it, so they don't hop as it grows
+      const fullRoute = design.showPlaces
+        ? toScreenRoute(map.project(route.geo.coordinates, shot.distance * HAZE_FACTOR))
+        : undefined;
       const placePoints = map.project(
         named.map(({ place }) => place.lngLat),
         shot.distance * HAZE_FACTOR,
@@ -195,6 +199,7 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
           showStart: projected[0] !== undefined,
           places: screenPlaces,
           placeLevel: level,
+          fullRoute,
           highlights,
         },
         brandName: BRAND.name,

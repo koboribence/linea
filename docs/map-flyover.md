@@ -93,7 +93,9 @@ A neveket nem a térkép, hanem a poszter rajzolója írja ki, ugyanúgy, mint a
 - **Ritkítás:** legfeljebb 7 / 6 / 5 név (falu- / város- / nagyvárosszint), egymástól legalább 28 egységnyi hellyel; fontossági sorrendben (nagyváros, város, falu, majd rang), így ütközésnél a fontosabb marad.
 - **Kiinduló település:** a (privacy zone utáni) kezdőponthoz legközelebbi név 4 km-en belül, bármilyen kicsi. Mindig elsőként kerül ki; ha a pontja a térképsáv szélén vagy kicsit azon kívül van, a név beljebb csúszik.
 
-**Hol:** csak a térképsávban: a cím alatt és a magasságprofil / adatok fölött, a kép szélétől a margónyira. Ami ebből kilógna, nem jelenik meg. Videón a sáv szélén elhalványulnak, hogy ne villanjanak be.
+**Hol:** csak a térképsávban: a cím alatt és a magasságprofil / adatok fölött, a kép szélétől a margónyira, és **soha nem az útvonalon** (a vonal, a fénye és a rajt/cél jelölő körül szabadon hagyott sávval). Minden név néhány helyet próbál sorban: a települése pontján, fölötte, alatta, jobbra, balra; az elsőt veszi, ami a sávon belül van, nem ér az útvonalhoz és más névhez. Ha egyik sem jó, kimarad. A kiinduló település több, távolabbi helyet is kipróbál, és végső esetben az útvonalra is kerülhet, de mindig ki van írva. Videón a teljes (később kirajzolódó) útvonalat is kerülik, így nem ugrálnak, ahogy a vonal halad; a sáv szélén elhalványulnak.
+
+**Kapcsoló:** „Településnevek” a 3D térkép hátterénél és a videó beállításainál (`showPlaces`, alapból be).
 
 **Megjelenés:** a poszter címkebetűjével, nagybetűvel, nagyváros 30, város 25, falu 22 egység, 85%-os erősséggel, ellentétes színű körvonallal (sötét térképen világos, világoson sötét).
 

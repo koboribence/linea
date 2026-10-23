@@ -50,7 +50,12 @@ export interface LabelOptions {
   spacing: number;
   /** Width of the fade at the edges of the area */
   fade: number;
+  /** The route on the image: names keep `clearance` away from its line (and its markers) */
+  avoid?: { x: number; y: number; newSegment?: boolean }[];
+  clearance?: number;
 }
+
+type Segment = [ax: number, ay: number, bx: number, by: number];
 
 const ORDER: Record<PlaceLevel, number> = { village: 0, town: 1, city: 2 };
 /** At most this many names, by level: a wide area stays sparse. */
@@ -112,11 +117,14 @@ export class PlaceLabels {
 
   /**
    * The names to draw: the start first, then by importance (cities, towns, villages; then
-   * the map's rank). A name is left out when its box would leave the area or touch a name
-   * already placed; the start's name is nudged inside instead, if its point is in the area.
+   * the map's rank). Each name tries a few spots: on its place, then above, below, beside
+   * it. A spot is taken only inside the area, clear of the route and of names placed before;
+   * a name with no such spot is left out. The start is always named: pulled inside the area,
+   * moved further from its place if needed, and as a last resort even over the route.
    */
   static choose(places: ScreenPlace[], options: LabelOptions): PlaceLabel[] {
-    const { level, area, measure, spacing, fade } = options;
+    const { level, area, measure, spacing, fade, clearance = 0 } = options;
+    const route = PlaceLabels.segments(options.avoid ?? []);
     const ordered = places
       .filter((place) => place.start || ORDER[place.kind] >= ORDER[level])
       .sort(
@@ -134,27 +142,118 @@ export class PlaceLabels {
       const reach = place.start ? Math.max(area.width, area.height) * 0.08 : 0;
       if (!PlaceLabels.contains(PlaceLabels.grow(area, reach), place.x, place.y)) continue;
       const { width, height } = measure(place.name, place.kind);
-      let { x, y } = place;
-      if (place.start) {
-        // Shifted inside rather than dropped, so the start is always named
-        x = Math.min(Math.max(x, area.x + width / 2), area.x + area.width - width / 2);
-        y = Math.min(Math.max(y, area.y + height / 2), area.y + area.height - height / 2);
-      }
-      const box = { x: x - width / 2, y: y - height / 2, width, height };
-      if (!PlaceLabels.inside(area, box)) continue;
-      const padded = PlaceLabels.grow(box, spacing);
-      if (placed.some((other) => PlaceLabels.overlap(padded, other))) continue;
-      placed.push(padded);
+
+      const spots = PlaceLabels.spots(place, width, height, place.start ? 3 : 1).map((spot) =>
+        place.start ? PlaceLabels.pullInside(spot, width, height, area) : spot,
+      );
+      const boxAt = ({ x, y }: { x: number; y: number }) => ({
+        x: x - width / 2,
+        y: y - height / 2,
+        width,
+        height,
+      });
+      const free = (spot: { x: number; y: number }, clearOfRoute: boolean) => {
+        const box = boxAt(spot);
+        if (!PlaceLabels.inside(area, box)) return false;
+        const padded = PlaceLabels.grow(box, spacing);
+        if (placed.some((other) => PlaceLabels.overlap(padded, other))) return false;
+        return !clearOfRoute || !PlaceLabels.crosses(PlaceLabels.grow(box, clearance), route);
+      };
+      const spot =
+        spots.find((candidate) => free(candidate, true)) ??
+        (place.start ? spots.find((candidate) => free(candidate, false)) : undefined);
+      if (!spot) continue;
+
+      const box = boxAt(spot);
+      placed.push(PlaceLabels.grow(box, spacing));
       labels.push({
         name: place.name,
         kind: place.kind,
-        x,
-        y,
+        x: spot.x,
+        y: spot.y,
         start: Boolean(place.start),
         opacity: PlaceLabels.edgeOpacity(area, box, fade),
       });
     }
     return labels;
+  }
+
+  /** Where a name may go around its place: on it, then above, below, right, left; `rings` deep. */
+  private static spots(
+    place: { x: number; y: number },
+    width: number,
+    height: number,
+    rings: number,
+  ): { x: number; y: number }[] {
+    const gap = height * 0.6;
+    const spots = [{ x: place.x, y: place.y }];
+    for (let ring = 1; ring <= rings; ring++) {
+      const dy = ring * (height + gap);
+      const dx = width / 2 + ring * gap * 1.5;
+      spots.push(
+        { x: place.x, y: place.y - dy },
+        { x: place.x, y: place.y + dy },
+        { x: place.x + dx, y: place.y },
+        { x: place.x - dx, y: place.y },
+      );
+    }
+    return spots;
+  }
+
+  private static pullInside(
+    spot: { x: number; y: number },
+    width: number,
+    height: number,
+    area: Box,
+  ): { x: number; y: number } {
+    return {
+      x: Math.min(Math.max(spot.x, area.x + width / 2), area.x + area.width - width / 2),
+      y: Math.min(Math.max(spot.y, area.y + height / 2), area.y + area.height - height / 2),
+    };
+  }
+
+  /** The route's line as segments (gaps, where the route is hidden, are skipped). */
+  private static segments(points: { x: number; y: number; newSegment?: boolean }[]): Segment[] {
+    const segments: Segment[] = [];
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1]!;
+      const b = points[i]!;
+      if (!b.newSegment) segments.push([a.x, a.y, b.x, b.y]);
+    }
+    if (points.length === 1)
+      segments.push([points[0]!.x, points[0]!.y, points[0]!.x, points[0]!.y]);
+    return segments;
+  }
+
+  /** Whether any segment touches the box (Liang–Barsky clipping). */
+  private static crosses(box: Box, segments: Segment[]): boolean {
+    const right = box.x + box.width;
+    const bottom = box.y + box.height;
+    return segments.some(([ax, ay, bx, by]) => {
+      if (Math.max(ax, bx) < box.x || Math.min(ax, bx) > right) return false;
+      if (Math.max(ay, by) < box.y || Math.min(ay, by) > bottom) return false;
+      const dx = bx - ax;
+      const dy = by - ay;
+      let t0 = 0;
+      let t1 = 1;
+      const edges: [number, number][] = [
+        [-dx, ax - box.x],
+        [dx, right - ax],
+        [-dy, ay - box.y],
+        [dy, bottom - ay],
+      ];
+      for (const [p, q] of edges) {
+        if (p === 0) {
+          if (q < 0) return false;
+          continue;
+        }
+        const r = q / p;
+        if (p < 0) t0 = Math.max(t0, r);
+        else t1 = Math.min(t1, r);
+        if (t0 > t1) return false;
+      }
+      return true;
+    });
   }
 
   /** 1 inside, fading towards 0 within `fade` of the area's edges. */

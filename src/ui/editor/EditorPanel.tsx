@@ -109,6 +109,11 @@ export function EditorPanel(props: EditorPanelProps) {
             />
           </div>
           <MapStylePicker design={design} update={update} />
+          <Toggle
+            label={t('map.places')}
+            checked={design.showPlaces}
+            onChange={(showPlaces) => update({ showPlaces })}
+          />
           <p className="privacy-note">{t('map.privacy')}</p>
         </Section>
       )}

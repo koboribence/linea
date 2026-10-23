@@ -37,6 +37,8 @@ export interface PosterDesign {
   privacyMeters: number;
   showElevation: boolean;
   showLogo: boolean;
+  /** Town names on the 3D map (image and video) */
+  showPlaces: boolean;
   /** Placement of the background photo; only used while a photo is loaded */
   photo: PhotoSettings;
   /** What fills the background behind the text */
@@ -102,6 +104,7 @@ export class PosterDefaults {
     privacyMeters: 200,
     showElevation: true,
     showLogo: true,
+    showPlaces: true,
     background: 'theme',
     mapStyle: 'neutral',
     videoSeconds: 20,

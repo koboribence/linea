@@ -249,7 +249,7 @@ describe('PlaceLabels', () => {
   it('keeps names inside the area, apart, the important ones first', () => {
     const labels = PlaceLabels.choose(
       [
-        place('Edge', 'city', 120, 600), // would stick out on the left
+        place('Edge', 'city', 120, 600), // sticks out on the left: goes beside its place
         place('Below', 'city', 500, 1250), // under the stats
         place('Village', 'village', 500, 500), // too small for the level
         place('Small', 'town', 500, 700, { rank: 12 }),
@@ -257,7 +257,27 @@ describe('PlaceLabels', () => {
       ],
       options,
     );
-    expect(labels.map((l) => l.name)).toEqual(['Big']);
+    expect(labels.map((l) => l.name)).toEqual(['Big', 'Edge']);
+    expect(labels[1]!.x).toBeGreaterThan(120 + ('Edge'.length * 20) / 2);
+  });
+
+  it('keeps names off the route line, moving them beside their place or leaving them out', () => {
+    // A horizontal route right through both places
+    const avoid = [
+      { x: 100, y: 600 },
+      { x: 980, y: 600 },
+    ];
+    const labels = PlaceLabels.choose(
+      [
+        place('Crossed', 'city', 500, 600),
+        place('Startfalu', 'village', 300, 600, { start: true }),
+      ],
+      { ...options, avoid, clearance: 10 },
+    );
+    const byName = Object.fromEntries(labels.map((l) => [l.name, l]));
+    // Both named, but neither on the line: above or below it
+    expect(Math.abs(byName['Crossed']!.y - 600)).toBeGreaterThan(15 + 10);
+    expect(Math.abs(byName['Startfalu']!.y - 600)).toBeGreaterThan(15 + 10);
   });
 
   it('always names the start place, nudged inside if needed, even if small', () => {

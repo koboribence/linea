@@ -66,6 +66,11 @@ export interface PosterScene {
     placeLevel?: PlaceLevel;
     /** Peaks pointed out on the route (video) */
     highlights?: HighlightMark[];
+    /**
+     * The whole route on the image, when `route` is only the part drawn so far (video):
+     * town names keep clear of all of it, so they don't jump as the line grows
+     */
+    fullRoute?: ScreenPoint[];
     attribution: string[];
     /** Map colors that text and the route must stand out from */
     contrast: MapContrast;
@@ -99,6 +104,7 @@ export interface SceneInput {
     places?: ScreenPlace[];
     placeLevel?: PlaceLevel;
     highlights?: HighlightMark[];
+    fullRoute?: ScreenPoint[];
   };
   brandName: string;
 }
@@ -127,6 +133,8 @@ export class PosterSceneBuilder {
       transparent: design.transparent && design.background === 'theme' && !photo && !map,
       map: map && {
         ...map,
+        // Town names can be switched off
+        places: design.showPlaces ? map.places : undefined,
         attribution: MapStyles.attribution(),
         contrast: this.mapContrast(map.kind, design, colors),
       },

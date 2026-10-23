@@ -530,6 +530,9 @@ export class PosterRenderer {
       },
       spacing: 28 * u,
       fade: map.image ? 0 : 60 * u,
+      // Clear of the line, its glow and its start and finish markers
+      avoid: map.fullRoute ?? map.route,
+      clearance: (scene.routeWidth / 2 + 14) * u,
     });
 
     const color = Color.parse(map.contrast.label);

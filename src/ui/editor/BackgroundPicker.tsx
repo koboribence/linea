@@ -1,6 +1,7 @@
 import type { BackgroundKind, PosterDesign } from '../../domain/poster/PosterDesign';
 import { useLocale } from '../../i18n/LocaleContext';
 import { Segmented } from '../controls/Segmented';
+import { Toggle } from '../controls/Toggle';
 import { MapView } from '../map/MapView';
 import { PhotoPicker } from './PhotoPicker';
 
@@ -40,6 +41,11 @@ export function BackgroundPicker(props: BackgroundPickerProps) {
 
       {design.background === 'map' && (
         <>
+          <Toggle
+            label={i18n.t('map.places')}
+            checked={design.showPlaces}
+            onChange={(showPlaces) => update({ showPlaces })}
+          />
           {props.mapLoading && (
             <p className="field__hint" role="status">
               {i18n.t('map.loading')}

@@ -152,6 +152,30 @@ describe('Readability (WCAG 2.2 AA)', () => {
 });
 
 describe('PosterSceneBuilder', () => {
+  it('leaves town names out when they are switched off', () => {
+    const activity = new Activity({ sport: 'ride', sourceFormat: 'gpx' }, [{ lat: 47, lon: 19 }]);
+    const places = [
+      {
+        name: 'Érd',
+        kind: 'town' as const,
+        rank: 11,
+        lngLat: [18.9, 47.4] as [number, number],
+        x: 500,
+        y: 700,
+      },
+    ];
+    const build = (showPlaces: boolean) =>
+      builder.build({
+        activity,
+        design: { ...PosterDefaults.create(activity, []), showPlaces },
+        statItems: [],
+        map: { kind: 'streets', places },
+        brandName: 'Linea',
+      }).map?.places;
+    expect(build(true)).toEqual(places);
+    expect(build(false)).toBeUndefined();
+  });
+
   it('builds a localized automatic title from the local start time', async () => {
     // Starts 15:35 local time in Newfoundland
     const ride = await loadFixture('Edge810-Vector-2013-08-16-15-35-10.fit');
