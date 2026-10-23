@@ -53,6 +53,11 @@ export interface LabelOptions {
   /** The route on the image: names keep `clearance` away from its line (and its markers) */
   avoid?: { x: number; y: number; newSegment?: boolean }[];
   clearance?: number;
+  /**
+   * Only places within this distance of the route are named (the route's places, not the
+   * area's); one kind smaller than `level` too, if within half of it
+   */
+  near?: number;
 }
 
 type Segment = [ax: number, ay: number, bx: number, by: number];
@@ -100,6 +105,11 @@ export class PlaceLabels {
     return best;
   }
 
+  /** One kind smaller: places right by the route may be named a level below the area's. */
+  static widen(level: PlaceLevel): PlaceLevel {
+    return level === 'city' ? 'town' : 'village';
+  }
+
   /** The places worth projecting: big enough for the level, or the start. */
   static relevant(places: Place[], level: PlaceLevel, start?: Place): Place[] {
     return places.filter((place) => place === start || ORDER[place.kind] >= ORDER[level]);
@@ -125,10 +135,19 @@ export class PlaceLabels {
    * moved further from its place if needed, and as a last resort even over the route.
    */
   static choose(places: ScreenPlace[], options: LabelOptions): PlaceLabel[] {
-    const { level, area, measure, spacing, fade, clearance = 0 } = options;
+    const { level, area, measure, spacing, fade, clearance = 0, near } = options;
     const route = PlaceLabels.segments(options.avoid ?? []);
+    // Along the route: close enough to it, the smaller kind only very close
+    const alongRoute = (place: ScreenPlace) => {
+      if (place.start) return true;
+      const smaller = ORDER[place.kind] < ORDER[level];
+      if (smaller && ORDER[place.kind] < ORDER[PlaceLabels.widen(level)]) return false;
+      if (near === undefined || route.length === 0) return !smaller;
+      const distance = PlaceLabels.distanceTo(place, route);
+      return distance <= (smaller ? near / 2 : near);
+    };
     const ordered = places
-      .filter((place) => place.start || ORDER[place.kind] >= ORDER[level])
+      .filter(alongRoute)
       .sort(
         (a, b) =>
           Number(Boolean(b.start)) - Number(Boolean(a.start)) ||
@@ -288,6 +307,20 @@ export class PlaceLabels {
     if (points.length === 1)
       segments.push([points[0]!.x, points[0]!.y, points[0]!.x, points[0]!.y]);
     return segments;
+  }
+
+  /** Shortest distance from a point to the line. */
+  private static distanceTo(point: { x: number; y: number }, segments: Segment[]): number {
+    let best = Infinity;
+    for (const [ax, ay, bx, by] of segments) {
+      const dx = bx - ax;
+      const dy = by - ay;
+      const length = dx * dx + dy * dy;
+      const t = length === 0 ? 0 : ((point.x - ax) * dx + (point.y - ay) * dy) / length;
+      const k = Math.max(0, Math.min(1, t));
+      best = Math.min(best, Math.hypot(point.x - (ax + k * dx), point.y - (ay + k * dy)));
+    }
+    return best;
   }
 
   /** Whether any segment touches the box (Liang–Barsky clipping). */

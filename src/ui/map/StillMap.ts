@@ -86,7 +86,7 @@ export class StillMap {
     const bitmap = await createImageBitmap(view.canvas);
     const places = view.places();
     const start = PlaceLabels.startPlace(places, route.coordinates[0]!);
-    const named = PlaceLabels.relevant(places, request.look.places, start);
+    const named = PlaceLabels.relevant(places, PlaceLabels.widen(request.look.places), start);
     const result = {
       image: { source: bitmap, width, height },
       points: view.project(route.coordinates),

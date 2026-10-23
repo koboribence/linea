@@ -313,6 +313,23 @@ describe('PlaceLabels', () => {
     expect(touches({ x: 925, y: 390 })).toBe(false);
   });
 
+  it("names the route's places: near the line, small ones only right by it", () => {
+    const avoid = [
+      { x: 100, y: 700 },
+      { x: 980, y: 700 },
+    ];
+    const labels = PlaceLabels.choose(
+      [
+        place('Faraway', 'city', 500, 350), // 350 off the route
+        place('Roadside', 'town', 300, 780), // 80 off
+        place('Tinyvillage', 'village', 750, 740), // 40 off: smaller, but right by it
+        place('Farvillage', 'village', 750, 900), // 200 off: smaller and far
+      ],
+      { ...options, level: 'town', avoid, clearance: 10, near: 150 },
+    );
+    expect(labels.map((l) => l.name).sort()).toEqual(['Roadside', 'Tinyvillage']);
+  });
+
   it('finds a free spot for a card: off its point, the route and what is taken', () => {
     const route = [
       { x: 100, y: 600 },

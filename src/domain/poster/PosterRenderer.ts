@@ -12,6 +12,8 @@ import type { PhotoImage, PosterScene, PosterStat } from './PosterScene';
 const BASE_WIDTH = 1080;
 /** Town name sizes by kind of place, in units */
 const PLACE_NAME_SIZE: Record<PlaceLevel, number> = { city: 30, town: 25, village: 22 };
+/** Town names are shown only this close to the route (smaller places within half), units */
+const PLACE_NEAR_ROUTE = 150;
 /** Town names are a little subdued: part of the map, not of the poster's text */
 const PLACE_NAME_OPACITY = 0.7;
 /** Gap between stat columns, in units */
@@ -535,6 +537,8 @@ export class PosterRenderer {
       // Clear of the line, its glow and its start and finish markers
       avoid: map.fullRoute ?? map.route,
       clearance: (scene.routeWidth / 2 + 14) * u,
+      // The route's places: towns it passes, not ones far off to the side
+      near: PLACE_NEAR_ROUTE * u,
     });
 
     const color = Color.parse(map.contrast.label);

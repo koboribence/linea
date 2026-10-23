@@ -146,7 +146,7 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
   const named = useMemo(() => {
     if (!places) return [];
     const start = PlaceLabels.startPlace(places, route.geo.coordinates[0]!);
-    return PlaceLabels.relevant(places, level, start).map((place) => ({
+    return PlaceLabels.relevant(places, PlaceLabels.widen(level), start).map((place) => ({
       place,
       start: place === start,
     }));
