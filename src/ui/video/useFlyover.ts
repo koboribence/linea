@@ -7,13 +7,12 @@ import {
   useSyncExternalStore,
   type RefObject,
 } from 'react';
-import { BRAND } from '../../brand';
 import type { Activity } from '../../domain/activity/Activity';
 import { StatPresenter } from '../../domain/format/StatPresenter';
 import { FlyoverPath } from '../../domain/map/FlyoverPath';
 import { LiveStats } from '../../domain/map/LiveStats';
 import { MapFraming } from '../../domain/map/MapFraming';
-import { PlaceLabels } from '../../domain/map/PlaceLabels';
+import { PlaceLabels, PlaceMemory } from '../../domain/map/PlaceLabels';
 import { PosterDefaults, type PosterDesign } from '../../domain/poster/PosterDesign';
 import { POSTER_FORMATS } from '../../domain/poster/PosterFormat';
 import { PosterFonts } from '../../domain/poster/PosterFont';
@@ -155,8 +154,7 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
   // The stats at their final values: the layout is measured on them, so counters never move it
   const finalStats = useMemo(() => {
     const statItems = presenter.groups(activity, stats).flatMap((g) => g.items);
-    return builder.build({ activity, design, statItems, route, elevation, brandName: BRAND.name })
-      .stats;
+    return builder.build({ activity, design, statItems, route, elevation }).stats;
   }, [presenter, activity, stats, builder, design, route, elevation]);
 
   // The peaks the user picked, with their label and value (long videos only)
@@ -176,7 +174,7 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
   // Route, text and stats over a map at moment t: same layout as the image,
   // with the route drawing itself and counters ticking up
   const sceneAt = useCallback(
-    (map: MapView, t: number): PosterScene => {
+    (map: MapView, t: number, memory: PlaceMemory): PosterScene => {
       const shot = path.shotAt(t);
       const partial = path.partialRoute(shot.progress);
       // Far ahead the map fades into haze; a crisp line there would only clutter the sky
@@ -217,10 +215,12 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
           showStart: projected[0] !== undefined,
           places: screenPlaces,
           placeLevel: level,
+          // Names stay put from frame to frame and fade rather than pop
+          placeMemory: memory,
+          time: t * design.videoSeconds,
           fullRoute,
           highlights,
         },
-        brandName: BRAND.name,
       });
       return {
         ...scene,
@@ -279,7 +279,6 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
         route,
         elevation,
         map: { kind: 'flyover', route: toScreenRoute(backdrop.route, route.geo.values) },
-        brandName: BRAND.name,
       }),
     );
   }, [
@@ -313,7 +312,6 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
         statItems,
         route,
         elevation,
-        brandName: BRAND.name,
       });
       return {
         ...scene,
@@ -331,22 +329,27 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
   const [playing, setPlaying] = useState(false);
   const timeRef = useRef(0);
 
+  // The town names playback showed so far (the export keeps its own)
+  const [placeMemory] = useState(() => new PlaceMemory());
+
+  // `places`: the names of earlier frames; a fresh one shows the moment's names at once
   const drawAt = useCallback(
-    (t: number) => {
+    (t: number, places: PlaceMemory) => {
       if (!fontsLoaded || !refs.overlay.current) return;
       if (flat) return PosterRenderer.render(refs.overlay.current, flatSceneAt(t));
       if (!view) return;
       view.setCamera(path.shotAt(t));
       // Map and overlay in the same frame: otherwise the route seems to slide on the map
       view.renderNow();
-      PosterRenderer.render(refs.overlay.current, sceneAt(view, t));
+      PosterRenderer.render(refs.overlay.current, sceneAt(view, t, places));
     },
     [view, flat, fontsLoaded, path, sceneAt, flatSceneAt, refs],
   );
 
   // Paused: show the chosen moment (also redraws when the design changes)
   useEffect(() => {
-    if (!playing) drawAt(time);
+    // No fading while paused: a name would stay half faded
+    if (!playing) drawAt(time, new PlaceMemory());
   }, [playing, time, drawAt]);
 
   // Playing: real-time preview over the tiles loaded ahead
@@ -357,13 +360,13 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
     let frame = requestAnimationFrame(function tick(now) {
       const t = Math.min(1, (now - startedAt) / (seconds * 1000));
       timeRef.current = t;
-      drawAt(t);
+      drawAt(t, placeMemory);
       setTime(t);
       if (t < 1) frame = requestAnimationFrame(tick);
       else setPlaying(false);
     });
     return () => cancelAnimationFrame(frame);
-  }, [playing, design.videoSeconds, drawAt]);
+  }, [playing, design.videoSeconds, drawAt, placeMemory]);
 
   const togglePlay = useCallback(() => {
     setPlaying((now) => {
@@ -408,11 +411,12 @@ export function useFlyover(input: FlyoverInput, refs: FlyoverRefs, displayScale:
         map.setPadding(band.top, height - band.bottom);
       }
       const exportMap = map;
+      const exportPlaces = new PlaceMemory();
       let frames = 0;
       const file = await new FlyoverExporter(exportMap).export({
         seconds: design.videoSeconds,
         moveTo: (t) => exportMap?.setCamera(path.shotAt(t)),
-        overlayAt: (t) => (exportMap ? sceneAt(exportMap, t) : flatSceneAt(t)),
+        overlayAt: (t) => (exportMap ? sceneAt(exportMap, t, exportPlaces) : flatSceneAt(t)),
         signal: abort.current.signal,
         onProgress: (share) => {
           const elapsed = (performance.now() - started) / 1000;

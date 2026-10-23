@@ -194,7 +194,6 @@ export const hu = {
 
   'editor.more': 'Egyéb',
   'editor.sport': 'Sportág',
-  'editor.logo': 'Logó a képen',
 
   'export.download': 'Letöltés',
   'export.share': 'Megosztás',

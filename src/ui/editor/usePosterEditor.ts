@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BRAND } from '../../brand';
 import type { Activity } from '../../domain/activity/Activity';
 import type { SportType } from '../../domain/activity/SportType';
 import { Graphemes } from '../../domain/format/Graphemes';
@@ -94,7 +93,6 @@ export function usePosterEditor(loaded: Activity, mode: 'image' | 'video' = 'ima
         elevation,
         photo: usePhoto ? photo : undefined,
         map: useMap ? { kind: 'streets' } : undefined,
-        brandName: BRAND.name,
       }),
     [builder, activity, design, statItems, route, elevation, photo, usePhoto, useMap],
   );

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { FlyoverPath } from '../src/domain/map/FlyoverPath';
 import { LiveStats } from '../src/domain/map/LiveStats';
 import { MapStyles } from '../src/domain/map/MapStyles';
-import { PlaceLabels, type ScreenPlace } from '../src/domain/map/PlaceLabels';
+import { PlaceLabels, PlaceMemory, type ScreenPlace } from '../src/domain/map/PlaceLabels';
 import { Color } from '../src/domain/poster/Color';
 import { PrivacyZone } from '../src/domain/route/PrivacyZone';
 import { RouteShape } from '../src/domain/route/RouteShape';
@@ -367,6 +367,68 @@ describe('PlaceLabels', () => {
     expect(PlaceLabels.choose(many, { ...options, level: 'city' }).length).toBeLessThanOrEqual(5);
     const [faded] = PlaceLabels.choose([place('Rim', 'city', 200, 330)], { ...options, fade: 60 });
     expect(faded!.opacity).toBeLessThan(1);
+  });
+
+  it('on video, keeps a name on its side of the route while it roughly fits there', () => {
+    const line = (y: number) => [
+      { x: 100, y },
+      { x: 980, y },
+    ];
+    const town = [place('Town', 'town', 500, 600)];
+    const at = (y: number, memory?: PlaceMemory, time?: number) =>
+      PlaceLabels.choose(town, { ...options, avoid: line(y), clearance: 10, memory, time })[0];
+    // Route through the place: the name goes above it
+    const memory = new PlaceMemory();
+    expect(at(600, memory, 0)!.y).toBeLessThan(600);
+    // The route creeps up: picked afresh the name would hop onto the place below the line…
+    expect(at(574)!.y).toBe(600);
+    // …but on video it stays above while the line doesn't touch it
+    expect(at(574, memory, 1 / 30)!.y).toBeLessThan(600);
+  });
+
+  it('on video, fades names in and out instead of popping, but shows them at once after a seek', () => {
+    const memory = new PlaceMemory();
+    const frame = (places: ScreenPlace[], time: number) =>
+      PlaceLabels.choose(places, { ...options, memory, time });
+    const a = place('Alpha', 'city', 300, 500);
+    const b = place('Beta', 'city', 700, 900);
+    expect(frame([a], 0)[0]!.opacity).toBe(1);
+    // Beta comes into view: faint at first, full after the fade
+    const first = frame([a, b], 1 / 30).find((l) => l.name === 'Beta')!;
+    expect(first.opacity).toBeGreaterThan(0);
+    expect(first.opacity).toBeLessThan(0.5);
+    let time = 1 / 30;
+    for (let i = 0; i < 12; i++) frame([a, b], (time += 1 / 30));
+    expect(frame([a, b], (time += 1 / 30)).find((l) => l.name === 'Beta')!.opacity).toBe(1);
+    // The route is only by Beta now: Alpha, far from it, fades out where it was
+    const byBeta = {
+      avoid: [
+        { x: 680, y: 960 },
+        { x: 760, y: 960 },
+      ],
+      near: 100,
+    };
+    const leaving = PlaceLabels.choose([a, b], {
+      ...options,
+      ...byBeta,
+      memory,
+      time: (time += 1 / 30),
+    });
+    const alpha = leaving.find((l) => l.name === 'Alpha')!;
+    expect(alpha.opacity).toBeGreaterThan(0);
+    expect(alpha.opacity).toBeLessThan(1);
+    for (let i = 0; i < 12; i++) {
+      PlaceLabels.choose([a, b], { ...options, ...byBeta, memory, time: (time += 1 / 30) });
+    }
+    const gone = PlaceLabels.choose([a, b], {
+      ...options,
+      ...byBeta,
+      memory,
+      time: (time += 1 / 30),
+    });
+    expect(gone.map((l) => l.name)).toEqual(['Beta']);
+    // A seek: the moment's names at once
+    expect(frame([a, b], time + 5).every((l) => l.opacity === 1)).toBe(true);
   });
 });
 

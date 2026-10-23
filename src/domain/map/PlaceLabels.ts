@@ -58,6 +58,21 @@ export interface LabelOptions {
    * area's); one kind smaller than `level` too, if within half of it
    */
   near?: number;
+  /**
+   * Video: what the previous frames showed, and this frame's time in seconds. Names then keep
+   * their spot while it stays roughly free, and fade out and in rather than pop or jump.
+   */
+  memory?: PlaceMemory;
+  time?: number;
+}
+
+/** A name as the previous frames left it: its spot around the place, and how visible it is. */
+interface Remembered {
+  spot: number;
+  /** 0…1 */
+  opacity: number;
+  /** Still wanted: false while fading out */
+  wanted: boolean;
 }
 
 type Segment = [ax: number, ay: number, bx: number, by: number];
@@ -69,6 +84,72 @@ const MAX_LABELS: Record<PlaceLevel, number> = { village: 7, town: 6, city: 5 };
 const START_RINGS = 5;
 /** The start place is the nearest named place within this distance of the start, meters. */
 const START_RADIUS = 4000;
+/** Seconds for a name to fade in or out on video. */
+const FADE_SECONDS = 0.3;
+/** Frames further apart than this (seconds) don't follow each other: a seek, or a new start. */
+const MAX_STEP = 0.25;
+/** A name already shown keeps its spot even if the route comes this much closer than usual. */
+const KEEP_CLEARANCE = 0.5;
+/** …and stays named while within this much more than the usual distance from the route. */
+const KEEP_NEAR = 1.3;
+
+/**
+ * What a video remembers of its town names from frame to frame. Picking spots afresh each
+ * frame makes names pop in and out and hop across the route as the camera turns; with this
+ * they stay where they are while they can, and change only by fading out and back in.
+ */
+export class PlaceMemory {
+  private readonly names = new Map<string, Remembered>();
+  private time?: number;
+
+  static key(place: Place): string {
+    return `${place.name}|${place.kind}`;
+  }
+
+  /**
+   * Seconds since the previous frame; undefined (and everything forgotten) when this frame
+   * doesn't follow it, so names show at once instead of fading in after a seek. A redraw of
+   * the same moment shows its choice at once too.
+   */
+  step(time: number): number | undefined {
+    const dt = this.time === undefined ? undefined : time - this.time;
+    this.time = time;
+    if (dt === undefined || dt <= 0 || dt > MAX_STEP) {
+      this.names.clear();
+      return undefined;
+    }
+    return dt;
+  }
+
+  /** The spot a name is shown at, while it is still wanted there. */
+  spotOf(key: string): number | undefined {
+    const name = this.names.get(key);
+    return name?.wanted ? name.spot : undefined;
+  }
+
+  /**
+   * Moves every name towards this frame's choice: wanted ones fade in at their spot; one that
+   * has to change spot first fades out, then comes back at the new one; names no longer
+   * wanted fade out where they are. Without `dt` (no previous frame) the choice shows at once.
+   */
+  update(wanted: Map<string, number>, dt: number | undefined): ReadonlyMap<string, Remembered> {
+    for (const [key, spot] of wanted) {
+      if (!this.names.has(key)) {
+        this.names.set(key, { spot, opacity: dt === undefined ? 1 : 0, wanted: true });
+      }
+    }
+    const rate = (dt ?? 0) / FADE_SECONDS;
+    for (const [key, name] of this.names) {
+      const spot = wanted.get(key);
+      name.wanted = spot !== undefined;
+      if (spot === name.spot) name.opacity = Math.min(1, name.opacity + rate);
+      else if (name.opacity > rate) name.opacity -= rate;
+      else if (spot !== undefined) Object.assign(name, { spot, opacity: 0 });
+      else this.names.delete(key);
+    }
+    return this.names;
+  }
+}
 
 /**
  * Which town names appear on the map, and where. Drawn by the poster renderer rather than the
@@ -135,8 +216,11 @@ export class PlaceLabels {
    * moved further from its place if needed, and as a last resort even over the route.
    */
   static choose(places: ScreenPlace[], options: LabelOptions): PlaceLabel[] {
-    const { level, area, measure, spacing, fade, clearance = 0, near } = options;
+    const { level, area, measure, spacing, fade, clearance = 0, near, memory } = options;
     const route = PlaceLabels.segments(options.avoid ?? []);
+    const dt = memory && options.time !== undefined ? memory.step(options.time) : undefined;
+    const shownAt = (place: Place) => memory?.spotOf(PlaceMemory.key(place));
+    const shown = (place: Place) => shownAt(place) !== undefined;
     // Along the route: close enough to it, the smaller kind only very close
     const alongRoute = (place: ScreenPlace) => {
       if (place.start) return true;
@@ -144,19 +228,19 @@ export class PlaceLabels {
       if (smaller && ORDER[place.kind] < ORDER[PlaceLabels.widen(level)]) return false;
       if (near === undefined || route.length === 0) return !smaller;
       const distance = PlaceLabels.distanceTo(place, route);
-      return distance <= (smaller ? near / 2 : near);
+      return distance <= (smaller ? near / 2 : near) * (shown(place) ? KEEP_NEAR : 1);
     };
-    const ordered = places
-      .filter(alongRoute)
-      .sort(
-        (a, b) =>
-          Number(Boolean(b.start)) - Number(Boolean(a.start)) ||
-          ORDER[b.kind] - ORDER[a.kind] ||
-          a.rank - b.rank ||
-          a.name.localeCompare(b.name),
-      );
+    const ordered = places.filter(alongRoute).sort(
+      (a, b) =>
+        Number(Boolean(b.start)) - Number(Boolean(a.start)) ||
+        // Names already on screen keep their place before new ones get one
+        Number(shown(b)) - Number(shown(a)) ||
+        ORDER[b.kind] - ORDER[a.kind] ||
+        a.rank - b.rank ||
+        a.name.localeCompare(b.name),
+    );
     const placed: Box[] = [];
-    const labels: PlaceLabel[] = [];
+    const labels: (PlaceLabel & { key: string; spot: number })[] = [];
     for (const place of ordered) {
       if (labels.length >= MAX_LABELS[level] + (labels[0]?.start ? 1 : 0)) break;
       // The start may sit just outside (e.g. at the bottom edge): it is pulled in below
@@ -164,23 +248,26 @@ export class PlaceLabels {
       if (!PlaceLabels.contains(PlaceLabels.grow(area, reach), place.x, place.y)) continue;
       const { width, height } = measure(place.name, place.kind);
 
-      const spots = PlaceLabels.spots(place, width, height, place.start ? START_RINGS : 1).map(
-        (spot) => (place.start ? PlaceLabels.pullInside(spot, width, height, area) : spot),
-      );
+      const spots = PlaceLabels.placeSpots(place, width, height, area);
       const boxAt = ({ x, y }: { x: number; y: number }) => ({
         x: x - width / 2,
         y: y - height / 2,
         width,
         height,
       });
-      const free = (spot: { x: number; y: number }, clearOfRoute: boolean) => {
+      const free = (spot: { x: number; y: number }, clearOfRoute: boolean, keep = 1) => {
         const box = boxAt(spot);
         if (!PlaceLabels.inside(area, box)) return false;
         const padded = PlaceLabels.grow(box, spacing);
         if (placed.some((other) => PlaceLabels.overlap(padded, other))) return false;
-        return !clearOfRoute || !PlaceLabels.crosses(PlaceLabels.grow(box, clearance), route);
+        return (
+          !clearOfRoute || !PlaceLabels.crosses(PlaceLabels.grow(box, clearance * keep), route)
+        );
       };
+      // A name on screen stays where it is while that's roughly free
+      const before = spots[shownAt(place) ?? -1];
       const spot =
+        (before && free(before, true, KEEP_CLEARANCE) ? before : undefined) ??
         spots.find((candidate) => free(candidate, true)) ??
         (place.start
           ? PlaceLabels.leastCovering(
@@ -195,6 +282,8 @@ export class PlaceLabels {
       const box = boxAt(spot);
       placed.push(PlaceLabels.grow(box, spacing));
       labels.push({
+        key: PlaceMemory.key(place),
+        spot: spots.indexOf(spot),
         name: place.name,
         kind: place.kind,
         x: spot.x,
@@ -203,7 +292,45 @@ export class PlaceLabels {
         opacity: PlaceLabels.edgeOpacity(area, box, fade),
       });
     }
-    return labels;
+    if (!memory)
+      return labels.map(({ name, kind, x, y, start, opacity }) => ({
+        name,
+        kind,
+        x,
+        y,
+        start,
+        opacity,
+      }));
+
+    // Video: each name shows at the spot it is fading at, as visible as it has faded so far
+    const names = memory.update(new Map(labels.map(({ key, spot }) => [key, spot])), dt);
+    return places.flatMap((place) => {
+      const name = names.get(PlaceMemory.key(place));
+      if (!name || name.opacity <= 0) return [];
+      const { width, height } = measure(place.name, place.kind);
+      const spot = PlaceLabels.placeSpots(place, width, height, area)[name.spot];
+      if (!spot) return [];
+      const box = { x: spot.x - width / 2, y: spot.y - height / 2, width, height };
+      const eased = name.opacity * name.opacity * (3 - 2 * name.opacity);
+      const opacity = eased * PlaceLabels.edgeOpacity(area, box, fade);
+      if (opacity <= 0) return [];
+      return [
+        { ...spot, name: place.name, kind: place.kind, start: Boolean(place.start), opacity },
+      ];
+    });
+  }
+
+  /** The spots a place's name may take, by index: the same spot keeps its index frame to frame. */
+  private static placeSpots(
+    place: ScreenPlace,
+    width: number,
+    height: number,
+    area: Box,
+  ): { x: number; y: number }[] {
+    const spots = PlaceLabels.spots(place, width, height, place.start ? START_RINGS : 1);
+    return place.start
+      ? spots.map((spot) => PlaceLabels.pullInside(spot, width, height, area))
+      : spots;
   }
 
   /**

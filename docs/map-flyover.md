@@ -74,6 +74,8 @@ Minden stílus domborzati és vektoros adatból készül, ezért bármilyen köz
 - a MapLibre alapból 300 ms alatt úsztatja a színeket. A 3D terepre feszített rétegek viszont csempénként gyorsítótárazódnak, és a tárba az átúsztatás első képkockája került, így a térkép egy színváltással „le volt maradva”. Ezért a stílusban nincs átmenet (`transition: 0`);
 - ez a tár csak akkor frissül, ha a csempék vagy a rétegek listája változik, a színtől nem. Ezért minden átfestéskor egy üres, átlátszó jelzőréteg új nevet kap (`palette-N`), ez kényszeríti az újrarajzolást.
 
+**Sötét ↔ világos váltás újratöltés nélkül (`MapView.restyle`):** ha a téma világosból sötétbe vált (vagy fordítva), más alapstílus kell (dark / positron). A kettő forrásai, ikonjai és betűi azonosak, ezért a futó térkép `setStyle(…, { diff: true })`-vel csak a rétegek különbségét kapja meg: a csempék maradnak, nincs újratöltés (mérve: a frissen betöltött és az átváltott térkép képe azonos). A diff nem küld `style.load` eseményt, ezért csak akkor várunk rá, ha a stílus valóban újratöltődik. Az előnézet kulcsa ezért nem tartalmazza a világos/sötét tónust.
+
 **Domborzat kiemelése (`MapStyles.exaggeration`):** az útvonal magasságkülönbségéből jön: síkvidéken erősebb (60 m alatt 3×), hegyekben gyengébb (1000 m fölött 1,3×), hogy a dombok látsszanak, de a hegyek ne legyenek tüskék. A `MapView` ezzel számolja a célpont talajmagasságát.
 
 **Domborzat:** a domborzati adat legfeljebb 13-as szintig töltődik le (512 px-es csempe, ez kb. a 256 px-es 14-es szint részletessége). A 3D formához és az árnyékoláshoz külön forrás tartozik, mert a közös forrás árnyékolása gyengébb; a böngésző gyorsítótára miatt a csempék így is csak egyszer töltődnek le.
@@ -93,7 +95,15 @@ A neveket nem a térkép, hanem a poszter rajzolója írja ki, ugyanúgy, mint a
 - **Ritkítás:** legfeljebb 7 / 6 / 5 név (falu- / város- / nagyvárosszint), egymástól legalább 28 egységnyi hellyel; fontossági sorrendben (nagyváros, város, falu, majd rang), így ütközésnél a fontosabb marad.
 - **Kiinduló település:** a (privacy zone utáni) kezdőponthoz legközelebbi név 4 km-en belül, bármilyen kicsi. Mindig elsőként kerül ki; ha a pontja a térképsáv szélén vagy kicsit azon kívül van, a név beljebb csúszik.
 
+**Az útvonal nevei:** a nevek az útvonal mentén vannak, nem a környéken: egy település csak akkor kap nevet, ha a pontja legfeljebb 150 egységre van a vonaltól (`PLACE_NEAR_ROUTE`). Egy szinttel kisebb település is kaphat nevet (pl. városszinten egy falu), ha egészen közel van, a fele távolságon belül (`PlaceLabels.widen`).
+
 **Hol:** csak a térképsávban: a cím alatt és a magasságprofil / adatok fölött, a kép szélétől a margónyira, és **soha nem az útvonalon** (a vonal, a fénye és a rajt/cél jelölő körül szabadon hagyott sávval). Minden név néhány helyet próbál sorban: a települése pontján, fölötte, alatta, jobbra, balra és átlósan; az elsőt veszi, ami a sávon belül van, nem ér az útvonalhoz és más névhez. Ha egyik sem jó, kimarad. A kiinduló település öt lépésnyi távolságig próbálkozik (a sáv szélén belülre húzva), és ha sehol nincs teljesen szabad hely, oda kerül, ahol a legkevesebb vonalat takarja; mindig ki van írva. Videón a teljes (később kirajzolódó) útvonalat is kerülik, így nem ugrálnak, ahogy a vonal halad; a sáv szélén elhalványulnak.
+
+**Videón nyugodtan (`PlaceMemory`):** ha minden képkocka elölről választaná a helyeket, a kamera fordulásakor a nevek ki-be villannának, és át-átugranának a vonal egyik oldaláról a másikra. Ezért a videó emlékszik, mit mutatott az előző képkockán:
+- egy már látható név a helyén marad, amíg az nagyjából szabad (a vonaltól a szokásos távolság felét is elfogadja), és elsőként kap helyet, az új nevek csak utána;
+- az útvonal-közelségben is van ráhagyás (a szokásos 1,3-szorosa), így a határon lévő név nem villog;
+- ami megjelenik vagy eltűnik, 0,3 mp alatt elhalványul vagy előtűnik; ha egy névnek mégis helyet kell cserélnie, előbb elhalványul, és az új helyén tűnik fel újra;
+- ugráskor (tekerés, újrakezdés) és megállított előnézetnél nincs halványítás: a pillanat nevei azonnal látszanak. A videókészítés saját emlékezetet kap, így az eredmény nem függ az előnézet lejátszásától.
 
 **Kapcsoló:** „Településnevek” a 3D térkép hátterénél és a videó beállításainál (`showPlaces`, alapból be).
 
@@ -101,7 +111,7 @@ A neveket nem a térkép, hanem a poszter rajzolója írja ki, ugyanúgy, mint a
 
 ## Kiemelt pillanatok (`RouteHighlights`, 30 mp-es videó)
 
-30 mp-es videónál a szerkesztőben megjelenik a „Pillanatok a videón” rész: csúcssebesség (futásnál tempóként), max. pulzus, max. teljesítmény, legmagasabb pont, amelyikhez van adat. A kiválasztottak a videón akkor jelennek meg, amikor a nyomvonal „feje” odaér: egy pont az útvonalon és egy kártya a címkével és az értékkel (a kép adatai között szereplő értékkel). A kártya a pont fölé kerül, ha ott nincs hely, alá, ha ott sem, feljebb vagy lejjebb lép; ha sehol nincs hely, csak a pont látszik.
+30 mp-es videónál a szerkesztőben megjelenik a „Pillanatok a videón” rész: csúcssebesség (futásnál tempóként), max. pulzus, max. teljesítmény, legmagasabb pont, amelyikhez van adat. A kiválasztottak a videón akkor jelennek meg, amikor a nyomvonal „feje” odaér: egy pont az útvonalon és egy kártya a címkével és az értékkel (a kép adatai között szereplő értékkel). A kártya a pont körül szabad helyet keres (`PlaceLabels.freeSpot`): fölötte, alatta, mellette, átlósan, egyre távolabb. Szabad az a hely, ahol nem ér az útvonalhoz, a településnevekhez, a többi kártyához és a pontokhoz; így a kártyák nem csúsznak egymásra. A kártyát vékony vonal köti a pontjához. Ha sehol nincs hely, csak a pont látszik.
 
 Adatvédelem: a privacy zone-ba eső csúcsokat nem mutatjuk, mert elárulnák a rejtett kezdő- vagy végpontot. A sebességcsúcs simított GPS-sebességből jön (vagy a készülék saját sebességadatából), hogy egyetlen GPS-ugrás ne legyen csúcs.
 
@@ -186,7 +196,7 @@ Mérve: követés közben legfeljebb 0,2° fordulás és 1 m-nél kisebb magass�
 
 ## Videó: élő adatok és felirat
 
-A videón ugyanaz az elrendezés látszik, mint a képen: cím, adatok, logó, forrásmegjelölés. A [useFlyover](../src/ui/video/useFlyover.ts) képkockánként építi fel:
+A videón ugyanaz az elrendezés látszik, mint a képen: cím, adatok, forrásmegjelölés. A [useFlyover](../src/ui/video/useFlyover.ts) képkockánként építi fel:
 
 - **Útvonal:** a `partialRoute(progress)` a már bejárt részt adja, színezési értékekkel. A végén levő pötty a „fej”.
 - **Felpörgő számok:** a `LiveStats.snapshot` adja őket. **Mindig 0-ról indulnak**, és a végső értéken állnak meg.
@@ -241,7 +251,7 @@ Külön, rejtett, teljes részletességű térképen (`detail: 'full'`, `pixelRa
 Képkockánként, nem valós időben:
 
 1. `moveTo(t)`: kamera beállítása;
-2. `ready()`: a térkép azonnal kirajzolja a nézetet; ha minden csempe megvan, kész, különben megvárja a következő érkező csempét, és újra próbálja (legfeljebb 5 mp);
+2. `ready(5000, true)`: a térkép azonnal kirajzolja a nézetet; ha minden csempe megvan, kész, különben megvárja a következő érkező csempét, és újra próbálja (legfeljebb 5 mp). Utána befejezi a terepre feszített rétegek frissítését (lásd lent);
 3. `overlayAt(t)`: az útvonal kivetítése a már betöltött domborzatra, majd a felirat-réteg;
 4. a térkép és a felirat összeolvasztása egy vásznon;
 5. a kép átadása a kódolónak (és az előnézetnek, `onFrame`).
@@ -260,6 +270,10 @@ Mérve (valódi videókártya, 10 mp-es videó):
 | Kerékpár, 120 km (távoli kamera) | 50 mp | **7 mp** |
 | Kerékpár, 41 km | – | **8 mp** |
 | Futás, 4,7 km (közeli kamera, sok épület) | – | **11 mp** |
+
+**Hiányzó domborzati csempék:** a domborzat-szolgáltató (Mapterhorn) egyes területekről (pl. Velence környéke) nem ad 13-as szintű csempét, hanem 404-et. Ilyenkor a MapLibre csendben a kevésbé részletes csempét használja, de **semmilyen eseményt nem küld**, így a várakozás a teljes 5 mp-es időkorlátig tartott. Egy 20 mp-es velencei videónál 33 képkocka várt így: 170 mp volt a készítés. Most a várakozás 50 ms-onként olcsón megnézi, hogy minden csempe a helyén van-e (`areTilesLoaded`): ugyanez a videó **13 mp** alatt kész. Ugyanez gyorsítja az előnézet előtöltését is.
+
+**Villogó utcák:** a térkép rétegei (utcák, épületek) a 3D terepre textúraként kerülnek. Ha a nézet változik, a MapLibre egy darabig a régi nagyítással festett textúrákat mutatja, és képkockánként csak egyet frissít. Ez a képernyőn nem tűnik fel, de a videó egy képkockáján egyes részeken még a régi vonalvastagság és kevesebb utca látszott, a következőn más részeken, így az utcák villogtak. Videónál ezért a térkép addig rajzol újra, amíg minden textúra frissül (legfeljebb 64-szer, `finishDraping`). Az élő előnézetben ez nem fut, mert ott akadást okozna. Ára mérve kicsi: velencei 20 mp-es videó 13 helyett 16 mp.
 
 Képkockánként visszajátszva egyik videóban sincs ugrás, a képkockák teljesek (domborzat, épületek, nevek). Mellékhatásként a készítés háttérlapon is halad, mert már nem függ a képfrissítési ciklustól (`requestAnimationFrame`), amit a böngésző háttérlapon leállít.
 
@@ -305,13 +319,14 @@ Feltételek: az OpenFreeMap nem tiltja a tárolást (tömeges letöltésnél 300
 - **Könnyebb előnézet:** egy szinttel kevesebb csemperészlet, csak a látható pixelek; a videó ettől független, teljes részletességű.
 - **Előre kezdés:** a videó térképe már az egérmutatásra elkészül.
 - **Tartós tár:** service worker a már letöltött csempékhez.
-- **Színváltás újratöltés nélkül:** a stílus (alap / témaszín) és a kiemelő szín csak átfesti a futó térképet.
+- **Színváltás újratöltés nélkül:** a stílus (alap / témaszín), a kiemelő szín és a világos/sötét váltás is csak átfesti a futó térképet.
+- **Nem vár feleslegesen:** a hiányzó (404) csempék nem tartják fel a képkockákat.
 - **Lusta betöltés:** a térkép- és videókódot csak akkor tölti le a böngésző, amikor kell.
 - **Olcsó kamera-számítás:** előre kiszámolt irány-sáv; képkockánként csak kiolvasás.
 
 ## Forrásmegjelölés
 
-Csak a kötelező szerepel, minden térképes képen és videón a logó alatt, kis, de olvasható betűvel:
+Csak a kötelező szerepel, minden térképes képen és videón legalul, kis, de olvasható betűvel:
 „© OpenStreetMap · © OpenMapTiles · © Mapterhorn”.
 
 | Forrás | Miért kell |

@@ -192,7 +192,6 @@ export const en: Messages = {
 
   'editor.more': 'More',
   'editor.sport': 'Sport',
-  'editor.logo': 'Logo on the image',
 
   'export.download': 'Download',
   'export.share': 'Share',

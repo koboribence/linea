@@ -5,7 +5,7 @@ import type { ElevationProfile } from '../route/ElevationProfile';
 import type { RouteShape, ScreenPoint } from '../route/RouteShape';
 import type { MessageKey } from '../../i18n/messages/hu';
 import { MapStyles, type MapContrast, type MapKind, type PlaceLevel } from '../map/MapStyles';
-import type { ScreenPlace } from '../map/PlaceLabels';
+import type { PlaceMemory, ScreenPlace } from '../map/PlaceLabels';
 import type { PhotoSettings } from './PhotoPlacement';
 import { PosterFonts, type PosterFont } from './PosterFont';
 import type { PosterDesign } from './PosterDesign';
@@ -51,7 +51,6 @@ export interface PosterScene {
   route?: RouteShape;
   routeWidth: number;
   elevation?: ElevationProfile;
-  logo?: string;
   /**
    * 3D map background. `route` holds the route already projected onto the map (screen pixels);
    * without `image` the map is composited underneath afterwards (video frames).
@@ -64,6 +63,9 @@ export interface PosterScene {
     /** Places on the image, for town names; `placeLevel` is the smallest kind named */
     places?: ScreenPlace[];
     placeLevel?: PlaceLevel;
+    /** Video: the names of earlier frames, and this frame's time in seconds (names stay put) */
+    placeMemory?: PlaceMemory;
+    time?: number;
     /** Peaks pointed out on the route (video) */
     highlights?: HighlightMark[];
     /**
@@ -108,10 +110,11 @@ export interface SceneInput {
     showStart?: boolean;
     places?: ScreenPlace[];
     placeLevel?: PlaceLevel;
+    placeMemory?: PlaceMemory;
+    time?: number;
     highlights?: HighlightMark[];
     fullRoute?: ScreenPoint[];
   };
-  brandName: string;
 }
 
 /** Turns activity + design into a PosterScene in the current language. */
@@ -122,7 +125,7 @@ export class PosterSceneBuilder {
   ) {}
 
   build(input: SceneInput): PosterScene {
-    const { activity, design, statItems, route, elevation, photo, map, brandName } = input;
+    const { activity, design, statItems, route, elevation, photo, map } = input;
     const size = POSTER_FORMATS[design.format];
     const byId = new Map(statItems.map((item) => [item.id, item]));
 
@@ -153,7 +156,6 @@ export class PosterSceneBuilder {
       route,
       routeWidth: design.routeWidth,
       elevation: design.showElevation ? elevation : undefined,
-      logo: design.showLogo ? brandName : undefined,
     };
   }
 

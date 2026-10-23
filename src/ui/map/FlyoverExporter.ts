@@ -75,7 +75,8 @@ export class FlyoverExporter {
         moveTo(t);
         if (this.view) {
           // The overlay comes after loading: the route is projected onto the finished terrain
-          await this.view.ready();
+          // Complete: every painted part of the terrain refreshed, no flickering streets
+          await this.view.ready(5000, true);
           ctx.drawImage(this.view.canvas, 0, 0, width, height);
         }
         PosterRenderer.render(overlay, overlayAt(t));

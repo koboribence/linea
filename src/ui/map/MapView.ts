@@ -42,6 +42,15 @@ const METERS_PER_DEGREE = 111_320;
  * warmUp() never waits for the network. (MapLibre's default only covers about one view.)
  */
 const FLYOVER_TILE_CACHE = 1200;
+/** How often a wait for tiles checks whether they settled without telling (ms). */
+const SETTLED_CHECK_MS = 50;
+/** Extra draws allowed per video frame to finish refreshing the terrain's painted layers. */
+const MAX_DRAPING_REDRAWS = 64;
+
+/** The one MapLibre internal we rely on, read defensively: missing means nothing pending. */
+interface MapInternals {
+  painter?: { renderToTexture?: { needsFollowUpFrame?: boolean } };
+}
 
 /** Base styles, downloaded once per page; every map after that starts from memory. */
 const bases = new Map<MapTone, Promise<StyleSpecification>>();
@@ -309,25 +318,48 @@ export class MapView {
    * (or after a timeout). Faster than waiting for 'idle', which costs extra animation frames,
    * and it keeps working in a background tab, where the browser stops animation frames.
    */
-  async ready(timeoutMs = 5000): Promise<void> {
+  async ready(timeoutMs = 5000, complete = false): Promise<void> {
     const deadline = performance.now() + timeoutMs;
     for (;;) {
       // Drawing also asks for the tiles this view still needs
       this.map.redraw();
-      if (this.map.areTilesLoaded() || performance.now() >= deadline) return;
+      if (this.map.areTilesLoaded() || performance.now() >= deadline) break;
       await this.nextData(deadline - performance.now());
+    }
+    if (complete) this.finishDraping();
+  }
+
+  /**
+   * The map's layers are painted onto the 3D terrain as textures. When the view changes, even
+   * slightly, MapLibre keeps textures painted at the previous zoom and refreshes them one per
+   * frame later: fine on screen, but a video frame taken meanwhile shows some areas with old
+   * line widths and fewer streets, and the next frame others, so streets flicker. Redrawing
+   * until no refresh is pending gives a finished frame. Only for video frames: it takes a few
+   * extra draws, which would make the live preview stutter.
+   */
+  private finishDraping(): void {
+    const painter = (this.map as unknown as MapInternals).painter;
+    for (let i = 0; i < MAX_DRAPING_REDRAWS && painter?.renderToTexture?.needsFollowUpFrame; i++) {
+      this.map.redraw();
     }
   }
 
-  /** Resolves when the next tile (or other map data) arrives, or after `timeoutMs`. */
+  /**
+   * Resolves when the next tile (or other map data) arrives, when all tiles are in, or after
+   * `timeoutMs`. A missing tile (404, e.g. terrain not available at that zoom over some areas)
+   * settles without any event: the map quietly falls back to a less detailed one. So besides
+   * the events, a cheap check now and then; otherwise those frames would wait out the timeout.
+   */
   private nextData(timeoutMs: number): Promise<void> {
     return new Promise((resolve) => {
       const done = () => {
         clearTimeout(timer);
+        clearInterval(check);
         this.map.off('data', done);
         resolve();
       };
       const timer = setTimeout(done, Math.max(0, timeoutMs));
+      const check = setInterval(() => this.map.areTilesLoaded() && done(), SETTLED_CHECK_MS);
       this.map.on('data', done);
     });
   }

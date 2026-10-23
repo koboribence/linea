@@ -258,11 +258,6 @@ export function EditorPanel(props: EditorPanelProps) {
             onChange={setSport}
           />
         </div>
-        <Toggle
-          label={t('editor.logo')}
-          checked={design.showLogo}
-          onChange={(showLogo) => update({ showLogo })}
-        />
       </Section>
     </div>
   );

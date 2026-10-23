@@ -5,7 +5,7 @@ import { RouteShape, type Box, type ScreenPoint } from '../route/RouteShape';
 import { Graphemes } from '../format/Graphemes';
 import { Color } from './Color';
 import { PhotoPlacement } from './PhotoPlacement';
-import { PosterFonts, type FontFace, type PosterFont } from './PosterFont';
+import { PosterFonts, type PosterFont } from './PosterFont';
 import { Readability } from './Readability';
 import type { PhotoImage, PosterScene, PosterStat } from './PosterScene';
 
@@ -18,12 +18,6 @@ const PLACE_NEAR_ROUTE = 150;
 const PLACE_NAME_OPACITY = 0.7;
 /** Gap between stat columns, in units */
 const STAT_GAP = 32;
-/** The brand wordmark always uses the brand font, whatever font set the poster has */
-const LOGO_FONT: FontFace = {
-  family: '"Barlow Condensed", "Arial Narrow", sans-serif',
-  weight: 800,
-  italic: true,
-};
 
 interface TitleLayout {
   lines: string[];
@@ -89,7 +83,7 @@ export class PosterRenderer {
    * Font files download on first use only, so unused font sets cost nothing.
    */
   static async loadFonts(font: PosterFont): Promise<void> {
-    const faces = [font.title, font.value, font.label, LOGO_FONT];
+    const faces = [font.title, font.value, font.label];
     await Promise.all(
       faces.map((face) => document.fonts.load(PosterFonts.css(face, 100), 'ÁÉŐŰáéőű 0123')),
     );
@@ -127,7 +121,6 @@ export class PosterRenderer {
       this.drawElevation(scene.elevation, layout.elevation);
     }
     if (layout.stats) this.drawStats(layout.stats, layout.divider!);
-    if (scene.logo) this.drawLogo(scene.logo);
     if (scene.map) this.drawAttribution(scene.map.attribution);
   }
 
@@ -140,7 +133,7 @@ export class PosterRenderer {
 
     const hero = scene.route || scene.map ? undefined : scene.stats[0];
     const gridStats = hero ? scene.stats.slice(1) : scene.stats;
-    const bottom = scene.logo ? this.logoBaseline() - 80 * u : scene.height - this.padBottom;
+    const bottom = scene.height - this.padBottom;
     const middleTop = title.bottom + 56 * u;
 
     // Many stats can crowd out the route: shrink them until the middle keeps its share
@@ -392,7 +385,7 @@ export class PosterRenderer {
     return Readability.textColorFor(lineColors, white, black).toHex();
   }
 
-  /** Start: open ring, finish: filled dot (same as the logo). */
+  /** Start: open ring, finish: filled dot. */
   private drawMarkers(start: ScreenPoint | undefined, finish: ScreenPoint, width: number): void {
     const { ctx, scene } = this;
     const ring = width * 1.3;
@@ -480,10 +473,10 @@ export class PosterRenderer {
 
   /** Where the text (or the elevation profile) at the bottom begins. */
   private footerTop(layout: Layout): number {
-    const { u, scene } = this;
+    const { u } = this;
     if (layout.elevation) return layout.elevation.y;
     if (layout.divider !== undefined) return layout.divider;
-    return scene.logo ? this.logoBaseline() - 60 * u : this.logoBaseline() + 20 * u;
+    return this.safeBottom() + 20 * u;
   }
 
   /**
@@ -539,6 +532,8 @@ export class PosterRenderer {
       clearance: (scene.routeWidth / 2 + 14) * u,
       // The route's places: towns it passes, not ones far off to the side
       near: PLACE_NEAR_ROUTE * u,
+      memory: map.placeMemory,
+      time: map.time,
     });
 
     const color = Color.parse(map.contrast.label);
@@ -655,7 +650,7 @@ export class PosterRenderer {
     ctx.fillStyle = scene.colors.muted;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
-    const bottom = this.logoBaseline() + 56 * u;
+    const bottom = this.safeBottom() + 56 * u;
     lines.forEach((line, i) => {
       const y = bottom - (lines.length - 1 - i) * 19 * u;
       ctx.fillText(this.ellipsize(line, scene.width - 2 * this.pad), scene.width / 2, y);
@@ -764,41 +759,8 @@ export class PosterRenderer {
     });
   }
 
-  private drawLogo(name: string): void {
-    const { ctx, u, scene } = this;
-    const baseline = this.logoBaseline();
-    this.textShadow();
-    this.setFont(PosterFonts.css(LOGO_FONT, 38 * u));
-    ctx.fillStyle = scene.colors.text;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    const text = name.toLocaleUpperCase();
-    const width = ctx.measureText(text).width;
-    // Centered horizontally, at the bottom of the safe area
-    const x = (scene.width - width) / 2;
-    ctx.fillText(text, x, baseline);
-
-    // Underline drawn like a route: ring at the start, dot at the finish
-    const y = baseline + 12 * u;
-    ctx.strokeStyle = scene.colors.accent;
-    ctx.lineWidth = 3 * u;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(x + 4 * u, y);
-    ctx.quadraticCurveTo(x + width * 0.5, y - 5 * u, x + width, y + 1 * u);
-    ctx.stroke();
-    ctx.fillStyle = scene.colors.accent;
-    ctx.beginPath();
-    ctx.arc(x + width, y + 1 * u, 4 * u, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.lineWidth = 2.5 * u;
-    ctx.beginPath();
-    ctx.arc(x + 4 * u, y, 4 * u, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  /** The logo sits at the bottom edge of the safe area. */
-  private logoBaseline(): number {
+  /** Just above the bottom edge of the safe area. */
+  private safeBottom(): number {
     return this.scene.height - this.padBottom - 16 * this.u;
   }
 

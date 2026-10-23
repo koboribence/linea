@@ -70,7 +70,6 @@ Három réteg, mindegyik egy dologért felel:
 | `routeWidth` | Vonalvastagság px-ben, 1080 px széles képre | `10` |
 | `privacyMeters` | Elrejtett táv az útvonal két végén: 0, 200, 500 vagy 1000 m | `200` |
 | `showElevation` | Magasságprofil | `true` |
-| `showLogo` | Logó a kép alján | `true` |
 | `background` | `theme` (szín), `map` (3D térkép) vagy `photo` (fotó) | `theme` |
 | `mapStyle` | A videó térképe: `neutral` (alap) vagy `tinted` (témaszínnel árnyalt), lásd [map-flyover.md](map-flyover.md). Megszűnt stílus (pl. `satellite`, `night`) mentve az alapértékre áll vissza. | `neutral` |
 | `videoSeconds` | A videó hossza: 10, 20 vagy 30 mp | 20 |
@@ -166,7 +165,6 @@ Egy készlet ([PosterFont.ts](../src/domain/poster/PosterFont.ts)) három szerep
 - `titleScale`: a széles betűk kisebb mérettől indulnak;
 - `titleAscent`, `titleLineHeight`, `titleDescent`: az első sor alapvonala, a sortávolság és az alsó hely, a kézírás és a csöpögős betű lelógó részei miatt.
 
-**Logó:** a márka saját betűtípusa marad, bármelyik készlet van kiválasztva.
 
 **Szezonális hely:** a `seasonal` jelölésű készlet cserélhető; most Halloween, később például karácsonyi lehet. A felületen 🎃 jelvényt kap.
 
@@ -242,7 +240,7 @@ A rajzoló két lépésben dolgozik: a `layout()` kiszámolja a dobozokat, a `dr
 - **Story:** 200u felül és 230u alul, mert az Instagram oda rajzolja a felhasználónevet és a folyamatjelzőt, illetve az üzenetmezőt;
 - **Feed és Négyzet:** 100u felül és 72u alul.
 
-A logó az alsó margó határán ül, vízszintesen középen; az adatok fölötte vannak.
+Az adatok az alsó margó fölött érnek véget, vízszintesen középen. (A márka logója korábban a kép alján volt, kapcsolhatóan; kikerült, mert helyet vett el a magasságprofiltól, ami miatt az bekapcsolt logónál gyakran elmaradt.)
 
 | Elem | Elrendezés |
 |---|---|
@@ -250,7 +248,6 @@ A logó az alsó margó határán ül, vízszintesen középen; az adatok fölö
 | **Cím** | Barlow Condensed 800 dőlt, nagybetűs. Story-ban 136u-ról, máshol 112u-ról indul, és addig kicsinyedik (legfeljebb 60u-ig), amíg 2 sorba nem fér. Ha így sem fér, vagy egyetlen szó hosszabb a sornál, „…”-tal rövidül. |
 | **Adatok** | Alul, elválasztó vonal fölött. Oszlopszám: legfeljebb 3 adatnál annyi, ahány adat; 4 adatnál Story-ban 2×2, máshol 4 egy sorban; 5–6 adatnál 3 oszlop, 2 sor. A címkék és az értékek zsugorodnak, amíg a legszélesebb is elfér az oszlopában, így vízszintesen soha nem lógnak egymásba. **Középre igazítás:** ha az utolsó sor nem teljes (pl. 5 adatnál 3 + 2), vagy csak 1 adat van, a hiányos sor középre kerül, és a cellákon belül is középre igazodik a szöveg. Teljes soroknál a cellákban balra igazít, de a blokk egésze középen van: minden oszlop olyan széles, mint a legszélesebb címkéje vagy száma (videón a végső értékekre mérve, hogy a pörgés ne mozdítsa), a maradék hely pedig egyenlően oszlik el bal oldalt, az oszlopok között és jobb oldalt. |
 | **Hely az útvonalnak** | Ha az adatok miatt a középső rész a képmagasság 24%-a alá szorulna, az adatok 10%-os lépésekben kisebbek lesznek (legfeljebb a felükre), amíg az útvonalnak elég hely marad. |
-| **Logó** | Alul, vízszintesen középen. A márka neve útvonalszerű aláhúzással, rajtkarikával és célponttal. |
 | **Magasságprofil** | Az adatok fölött. Csak akkor kerül a képre, ha utána is marad legalább a képmagasság 22%-a az útvonalnak. Ezért négyzetes formátumban jellemzően elmarad. |
 | **Útvonal** | A maradék középső dobozban, a vonalvastagság kétszeresével beljebb húzva. |
 | **„Hős” elrendezés** | Ha nincs útvonal (GPS nélkül, vagy ha a privacy zone mindent elrejtett), az első kiválasztott adat kerül nagyban középre, kiemelő színnel; a többi alul marad. A nagy szám a középső rész szélességéhez és magasságához is igazodik, így nem ér bele a címbe. |
@@ -280,7 +277,7 @@ A logó az alsó margó határán ül, vízszintesen középen; az adatok fölö
   - útvonal-geometria: csak a privacy zone vagy a színezés változásakor;
   - minden más csak a jelenetet építi újra.
 - **Új fájl:** az `EditorScreen` új `key`-t kap. A cím az új fájlból jön, a kinézet és a kiválasztott adatok pedig a megjegyzett tervből (lásd fent).
-- **Beállítások szakaszai:** Formátum · Színek · Szöveg · Adatok a képen · Útvonal · Egyéb (sportág, logó). Csak az a beállítás jelenik meg, amelyhez van adat (pl. magasságprofil, privacy zone GPS nélkül nincs).
+- **Beállítások szakaszai:** Formátum · Színek · Szöveg · Adatok a képen · Útvonal · Egyéb (sportág). Csak az a beállítás jelenik meg, amelyhez van adat (pl. magasságprofil, privacy zone GPS nélkül nincs).
 - **Export:**
   - **Letöltés:** `canvas.toBlob('image/png')`, a fájl neve `linea-ÉÉÉÉ-HH-NN.png`. Kb. 80 ms.
   - **Megosztás:** a rendszer megosztás-menüje (`navigator.share` fájllal). Csak ott jelenik meg, ahol támogatott, főleg telefonon. Ha a felhasználó bezárja a menüt, az nem számít hibának.

@@ -170,7 +170,6 @@ describe('PosterSceneBuilder', () => {
         design: { ...PosterDefaults.create(activity, []), showPlaces },
         statItems: [],
         map: { kind: 'streets', places },
-        brandName: 'Linea',
       }).map?.places;
     expect(build(true)).toEqual(places);
     expect(build(false)).toBeUndefined();
@@ -185,7 +184,7 @@ describe('PosterSceneBuilder', () => {
   it('uses a typed-in date when the file has none', () => {
     const undated = new Activity({ sport: 'run', sourceFormat: 'gpx' }, [{ lat: 47, lon: 19 }]);
     const design = { ...PosterDefaults.create(undated, []), manualDate: '2026-10-19' };
-    const scene = builder.build({ activity: undated, design, statItems: [], brandName: 'Linea' });
+    const scene = builder.build({ activity: undated, design, statItems: [] });
     expect(scene.eyebrow).toBe('2026. október 19. · Futás');
   });
 
@@ -197,7 +196,6 @@ describe('PosterSceneBuilder', () => {
         activity: ride,
         design: { ...base, showDate, showSport },
         statItems: [],
-        brandName: 'Linea',
       }).eyebrow;
 
     expect(eyebrow(true, true)).toBe('2013. augusztus 16. · Kerékpár');
@@ -219,7 +217,7 @@ describe('PosterSceneBuilder', () => {
       stats: ['avgPace', 'distance'],
     };
 
-    const scene = builder.build({ activity: run, design, statItems: items, brandName: 'Linea' });
+    const scene = builder.build({ activity: run, design, statItems: items });
     expect(scene.stats.map((s) => s.label)).toEqual(['Átlagsebesség', 'Táv']);
     expect(scene.stats[1]).toMatchObject({ value: '4,69', unit: 'km' });
     expect(scene.width).toBe(1080);
